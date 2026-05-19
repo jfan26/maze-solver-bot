@@ -22,14 +22,73 @@ void runMotorPhase(const char* label, int left, int right, uint32_t durationMs) 
   delay(250);
 }
 
+void printManualControlHelp() {
+  Serial.println("[CTRL] Commands:");
+  Serial.println("[CTRL]   h            -> help");
+  Serial.println("[CTRL]   f            -> forward calibrated distance");
+  Serial.println("[CTRL]   b            -> reverse calibrated distance");
+  Serial.println("[CTRL]   l            -> turn left 90 deg");
+  Serial.println("[CTRL]   r            -> turn right 90 deg");
+  Serial.println("[CTRL]   t            -> turn 360 deg (CW)");
+  Serial.println("[CTRL]   p            -> toggle ToF printout");
+  Serial.println("[CTRL]   s            -> stop motors");
+}
+
+void executeManualCommand(char command, bool& tofPrintEnabled) {
+  switch (command) {
+    case 'h':
+      printManualControlHelp();
+      break;
+    case 'f':
+      runMotorPhase("forward calibrated", CAL_MOVE_SPEED, CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      break;
+    case 'b':
+      runMotorPhase("reverse calibrated", -CAL_MOVE_SPEED, -CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      break;
+    case 'l':
+      runMotorPhase("turn left 90", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_90_MS);
+      break;
+    case 'r':
+      runMotorPhase("turn right 90", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_90_MS);
+      break;
+    case 't':
+      runMotorPhase("turn 360", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_360_MS);
+      break;
+    case 'p':
+      tofPrintEnabled = !tofPrintEnabled;
+      Serial.printf("[CTRL] ToF printout %s\n", tofPrintEnabled ? "enabled" : "disabled");
+      break;
+    case 's':
+      stopMotors();
+      Serial.println("[CTRL] stop");
+      break;
+    default:
+      Serial.printf("[CTRL] Unknown command '%c'\n", command);
+      printManualControlHelp();
+      break;
+  }
+}
+
+void processSerialCommands(bool& tofPrintEnabled) {
+  while (Serial.available() > 0) {
+    char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r' || c == ' ') {
+      continue;
+    }
+    executeManualCommand(c, tofPrintEnabled);
+  }
+}
+
 void runHardwareSmokeTestLoop() {
   static uint32_t lastSensorPrintMs = 0;
   static uint32_t lastSequenceStartMs = 0;
   static bool sequenceDone = false;
+  static bool tofPrintEnabled = true;
 
   updateSensors();
+  processSerialCommands(tofPrintEnabled);
 
-  if (millis() - lastSensorPrintMs >= 200) {
+  if (tofPrintEnabled && millis() - lastSensorPrintMs >= 200) {
     lastSensorPrintMs = millis();
     Serial.printf(
         "[TOF] front=%.3fm left=%.3fm right=%.3fm\n",
@@ -52,7 +111,8 @@ void runHardwareSmokeTestLoop() {
     runMotorPhase("both-forward", testSpeed, testSpeed, phaseMs);
     runMotorPhase("both-reverse", -testSpeed, -testSpeed, phaseMs);
 
-    Serial.println("[SMOKE] motor test sequence complete; continuing ToF stream only.");
+    Serial.println("[SMOKE] motor test sequence complete; continuing ToF stream + manual controls.");
+    printManualControlHelp();
   }
 }
 

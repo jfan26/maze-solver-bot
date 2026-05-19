@@ -39,6 +39,15 @@ constexpr int I2C_SCL_PIN = SCL;
 constexpr int MOTOR_MIN_SPEED = -255;
 constexpr int MOTOR_MAX_SPEED = 255;
 
+
+// Manual calibration defaults for open-loop movement tests.
+// Increase/decrease durations to tune distance and angle.
+constexpr int CAL_MOVE_SPEED = 140;
+constexpr uint32_t CAL_FORWARD_MS = 600;
+constexpr int CAL_TURN_SPEED = 140;
+constexpr uint32_t CAL_TURN_90_MS = 340;
+constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_90_MS;
+
 // Basic obstacle threshold for early testing.
 constexpr uint16_t FRONT_OBSTACLE_THRESHOLD_MM = 150;
 
