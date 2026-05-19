@@ -1,6 +1,6 @@
 # Two-Wheel Differential-Drive Maze Robot
 
-This repository contains firmware and CAD files for a two-wheel differential-drive maze-solving robot built around the Adafruit Feather ESP32.
+This repository contains firmware and CAD files for a two-wheel differential-drive maze-solving robot built around the Adafruit Feather ESP32. The robot is built as part of the CM2I Spring 2026 Final Assignment.
 
 ## Repository focus
 
