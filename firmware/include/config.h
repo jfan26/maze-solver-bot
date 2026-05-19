@@ -2,36 +2,45 @@
 
 #include <Arduino.h>
 
-// TODO: Replace with actual left motor driver input pins.
-constexpr int LEFT_MOTOR_IN1_PIN = -1;
-constexpr int LEFT_MOTOR_IN2_PIN = -1;
+// Motor driver pins.
+// Wiring reference:
+//   Motor A: AIN1 -> GPIO 32, AIN2 -> GPIO 14
+//   Motor B: BIN1 -> GPIO 33, BIN2 -> GPIO 15
+// Current mapping assumption:
+//   Motor A = LEFT motor, Motor B = RIGHT motor.
+// If physical testing shows left/right swapped, only update these constants.
+constexpr uint8_t LEFT_MOTOR_IN1 = 32;   // AIN1
+constexpr uint8_t LEFT_MOTOR_IN2 = 14;   // AIN2
+constexpr uint8_t RIGHT_MOTOR_IN1 = 33;  // BIN1
+constexpr uint8_t RIGHT_MOTOR_IN2 = 15;  // BIN2 (ESP32 strapping pin)
 
-// TODO: Replace with actual right motor driver input pins.
-constexpr int RIGHT_MOTOR_IN1_PIN = -1;
-constexpr int RIGHT_MOTOR_IN2_PIN = -1;
+// Optional inversion flags, to be adjusted after physical testing.
+constexpr bool LEFT_MOTOR_INVERTED = false;
+constexpr bool RIGHT_MOTOR_INVERTED = false;
 
-// TODO: Set PWM-capable pins if the selected motor driver requires PWM control.
-constexpr int LEFT_MOTOR_PWM_PIN = -1;
-constexpr int RIGHT_MOTOR_PWM_PIN = -1;
+// ToF XSHUT pins.
+// WARNING: GPIO 12 is an ESP32 strapping pin and can affect boot if external
+// hardware drives it to an unexpected level during reset.
+constexpr uint8_t TOF_FRONT_XSHUT = 12;  // ESP32 strapping pin
+constexpr uint8_t TOF_LEFT_XSHUT = 27;
+constexpr uint8_t TOF_RIGHT_XSHUT = 13;
 
-// TODO: Set I2C pins for ToF sensors if custom pin mapping is required.
-constexpr int TOF_SDA_PIN = -1;
-constexpr int TOF_SCL_PIN = -1;
+// ToF I2C addresses after reassignment.
+constexpr uint8_t TOF_FRONT_ADDR = 0x30;
+constexpr uint8_t TOF_LEFT_ADDR = 0x31;
+constexpr uint8_t TOF_RIGHT_ADDR = 0x32;
 
-// TODO: Set XSHUT pins for each ToF sensor to allow individual addressing.
-constexpr int TOF_FRONT_XSHUT_PIN = -1;
-constexpr int TOF_LEFT_XSHUT_PIN = -1;
-constexpr int TOF_RIGHT_XSHUT_PIN = -1;
+// I2C pins.
+// Use Feather ESP32 defaults unless these are changed later.
+constexpr int I2C_SDA_PIN = SDA;
+constexpr int I2C_SCL_PIN = SCL;
 
-// TODO: Set encoder pins if wheel encoders are present in the drivetrain.
-constexpr int LEFT_ENCODER_A_PIN = -1;
-constexpr int LEFT_ENCODER_B_PIN = -1;
-constexpr int RIGHT_ENCODER_A_PIN = -1;
-constexpr int RIGHT_ENCODER_B_PIN = -1;
+// Motor speed limits.
+constexpr int MOTOR_MIN_SPEED = -255;
+constexpr int MOTOR_MAX_SPEED = 255;
 
-// TODO: Update robot geometry constants after mechanical design is finalized.
-constexpr float WHEEL_RADIUS_M = 0.030f;
-constexpr float WHEELBASE_M = 0.120f;
+// Basic obstacle threshold for early testing.
+constexpr uint16_t FRONT_OBSTACLE_THRESHOLD_MM = 150;
 
-// TODO: Tune control loop timing for motion/sensing requirements.
+// Control loop period.
 constexpr unsigned long CONTROL_LOOP_PERIOD_MS = 20;
