@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <cstdarg>
 
 #include "config.h"
 #include "maze_solver.h"
@@ -13,9 +15,75 @@ static RobotPose g_pose{};
 static SensorReadings g_sensorReadings{};
 
 namespace {
+WiFiServer g_cmdServer(WIFI_CMD_PORT);
+WiFiClient g_cmdClient;
+
+void logLine(const char* line) {
+  Serial.println(line);
+  if (g_cmdClient && g_cmdClient.connected()) {
+    g_cmdClient.println(line);
+  }
+}
+
+void logf(const char* fmt, ...) {
+  char buffer[192];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  va_end(args);
+  logLine(buffer);
+}
+
+void connectWifiAndStartCommandServer() {
+  if (WIFI_MODE == WifiMode::AccessPoint) {
+    WiFi.mode(WIFI_AP);
+    const bool started = WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
+    if (!started) {
+      logLine("[NET] failed to start AP; wireless commands disabled.");
+      return;
+    }
+    logf("[NET] AP started: SSID='%s'", WIFI_AP_SSID);
+    logf("[NET] AP IP=%s", WiFi.softAPIP().toString().c_str());
+  } else {
+    logf("[NET] connecting to SSID '%s' ...", WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+    uint8_t attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+      delay(250);
+      ++attempts;
+      Serial.print(".");
+    }
+    Serial.println();
+
+    if (WiFi.status() != WL_CONNECTED) {
+      logLine("[NET] Wi-Fi connect timeout; wireless commands disabled.");
+      return;
+    }
+    logf("[NET] Wi-Fi connected, IP=%s", WiFi.localIP().toString().c_str());
+  }
+
+  g_cmdServer.begin();
+  g_cmdServer.setNoDelay(true);
+  logf("[NET] command server listening on TCP %u", WIFI_CMD_PORT);
+}
+
+void serviceCommandClient() {
+  if (!g_cmdClient || !g_cmdClient.connected()) {
+    WiFiClient incoming = g_cmdServer.available();
+    if (incoming) {
+      g_cmdClient.stop();
+      g_cmdClient = incoming;
+      g_cmdClient.setNoDelay(true);
+      logf("[NET] client connected: %s", g_cmdClient.remoteIP().toString().c_str());
+      g_cmdClient.println("[CTRL] connected. Type h for help.");
+    }
+  }
+}
 
 void runMotorPhase(const char* label, int left, int right, uint32_t durationMs) {
-  Serial.printf("[MOTOR] %s | left=%d right=%d\n", label, left, right);
+  logf("[MOTOR] %s | left=%d right=%d", label, left, right);
   setMotorSpeeds(left, right);
   delay(durationMs);
   stopMotors();
@@ -23,15 +91,15 @@ void runMotorPhase(const char* label, int left, int right, uint32_t durationMs) 
 }
 
 void printManualControlHelp() {
-  Serial.println("[CTRL] Commands:");
-  Serial.println("[CTRL]   h            -> help");
-  Serial.println("[CTRL]   f            -> forward calibrated distance");
-  Serial.println("[CTRL]   b            -> reverse calibrated distance");
-  Serial.println("[CTRL]   l            -> turn left 90 deg");
-  Serial.println("[CTRL]   r            -> turn right 90 deg");
-  Serial.println("[CTRL]   t            -> turn 360 deg (CW)");
-  Serial.println("[CTRL]   p            -> toggle ToF printout");
-  Serial.println("[CTRL]   s            -> stop motors");
+  logLine("[CTRL] Commands:");
+  logLine("[CTRL]   h            -> help");
+  logLine("[CTRL]   f            -> forward calibrated distance");
+  logLine("[CTRL]   b            -> reverse calibrated distance");
+  logLine("[CTRL]   l            -> turn left 90 deg");
+  logLine("[CTRL]   r            -> turn right 90 deg");
+  logLine("[CTRL]   t            -> turn 360 deg (CW)");
+  logLine("[CTRL]   p            -> toggle ToF printout");
+  logLine("[CTRL]   s            -> stop motors");
 }
 
 void executeManualCommand(char command, bool& tofPrintEnabled) {
@@ -56,14 +124,14 @@ void executeManualCommand(char command, bool& tofPrintEnabled) {
       break;
     case 'p':
       tofPrintEnabled = !tofPrintEnabled;
-      Serial.printf("[CTRL] ToF printout %s\n", tofPrintEnabled ? "enabled" : "disabled");
+      logf("[CTRL] ToF printout %s", tofPrintEnabled ? "enabled" : "disabled");
       break;
     case 's':
       stopMotors();
-      Serial.println("[CTRL] stop");
+      logLine("[CTRL] stop");
       break;
     default:
-      Serial.printf("[CTRL] Unknown command '%c'\n", command);
+      logf("[CTRL] Unknown command '%c'", command);
       printManualControlHelp();
       break;
   }
@@ -72,6 +140,14 @@ void executeManualCommand(char command, bool& tofPrintEnabled) {
 void processSerialCommands(bool& tofPrintEnabled) {
   while (Serial.available() > 0) {
     char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r' || c == ' ') {
+      continue;
+    }
+    executeManualCommand(c, tofPrintEnabled);
+  }
+
+  while (g_cmdClient && g_cmdClient.connected() && g_cmdClient.available() > 0) {
+    char c = static_cast<char>(g_cmdClient.read());
     if (c == '\n' || c == '\r' || c == ' ') {
       continue;
     }
@@ -86,12 +162,13 @@ void runHardwareSmokeTestLoop() {
   static bool tofPrintEnabled = true;
 
   updateSensors();
+  serviceCommandClient();
   processSerialCommands(tofPrintEnabled);
 
   if (tofPrintEnabled && millis() - lastSensorPrintMs >= 200) {
     lastSensorPrintMs = millis();
-    Serial.printf(
-        "[TOF] front=%.3fm left=%.3fm right=%.3fm\n",
+    logf(
+        "[TOF] front=%.3fm left=%.3fm right=%.3fm",
         getFrontDistance(),
         getLeftDistance(),
         getRightDistance());
@@ -111,7 +188,7 @@ void runHardwareSmokeTestLoop() {
     runMotorPhase("both-forward", testSpeed, testSpeed, phaseMs);
     runMotorPhase("both-reverse", -testSpeed, -testSpeed, phaseMs);
 
-    Serial.println("[SMOKE] motor test sequence complete; continuing ToF stream + manual controls.");
+    logLine("[SMOKE] motor test sequence complete; continuing ToF stream + manual controls.");
     printManualControlHelp();
   }
 }
@@ -127,8 +204,9 @@ void setup() {
   initSensors();
 
   if (RUN_HARDWARE_SMOKE_TEST) {
-    Serial.println("[SMOKE] Hardware smoke test mode enabled");
-    Serial.println("[SMOKE] Open serial monitor @115200 to view ToF and motor phases");
+    logLine("[SMOKE] Hardware smoke test mode enabled");
+    logLine("[SMOKE] Open serial monitor @115200 to view ToF and motor phases");
+    connectWifiAndStartCommandServer();
   }
 
   // TODO: Initialize wheel encoders and differential-drive odometry state.

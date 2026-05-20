@@ -48,6 +48,24 @@ constexpr int CAL_TURN_SPEED = 140;
 constexpr uint32_t CAL_TURN_90_MS = 340;
 constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_90_MS;
 
+// Wi-Fi command bridge (optional).
+// Networking mode for wireless command/control over TCP.
+enum class WifiMode : uint8_t {
+  Station = 0,      // Join existing Wi-Fi network.
+  AccessPoint = 1,  // Broadcast robot-hosted Wi-Fi network.
+};
+constexpr WifiMode WIFI_MODE = WifiMode::AccessPoint;
+
+// Station mode credentials (used when WIFI_MODE == WifiMode::Station).
+constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
+constexpr char WIFI_PASS[] = "YOUR_WIFI_PASSWORD";
+
+// Access-point mode settings (used when WIFI_MODE == WifiMode::AccessPoint).
+constexpr char WIFI_AP_SSID[] = "MazeSolverBot";
+constexpr char WIFI_AP_PASS[] = "maze1234";
+
+constexpr uint16_t WIFI_CMD_PORT = 2323;
+
 // Basic obstacle threshold for early testing.
 constexpr uint16_t FRONT_OBSTACLE_THRESHOLD_MM = 150;
 
