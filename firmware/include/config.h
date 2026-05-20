@@ -45,8 +45,13 @@ constexpr int MOTOR_MAX_SPEED = 255;
 constexpr int CAL_MOVE_SPEED = 140;
 constexpr uint32_t CAL_FORWARD_MS = 600;
 constexpr int CAL_TURN_SPEED = 140;
-constexpr uint32_t CAL_TURN_90_MS = 340;
-constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_90_MS;
+
+// Separate left/right turn calibration
+constexpr uint32_t CAL_TURN_LEFT_90_MS = 540;
+constexpr uint32_t CAL_TURN_RIGHT_90_MS = 430;
+
+// 360 command in manual mode spins clockwise, so base it on right-turn timing
+constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_RIGHT_90_MS;
 
 // Wi-Fi command bridge (optional).
 // Networking mode for wireless command/control over TCP.
@@ -87,4 +92,4 @@ constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 40;
 
 // Short pause after each open-loop move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 150;
-constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_90_MS;
+constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_RIGHT_90_MS;

@@ -9,7 +9,7 @@
 #include "sensors.h"
 
 // Set to false when switching back to maze-solver behavior.
-constexpr bool RUN_HARDWARE_SMOKE_TEST = false;
+constexpr bool RUN_HARDWARE_SMOKE_TEST = true;
 
 static RobotPose g_pose{};
 static SensorReadings g_sensorReadings{};
@@ -115,10 +115,10 @@ void executeManualCommand(char command, bool& tofPrintEnabled) {
       runMotorPhase("reverse calibrated", -CAL_MOVE_SPEED, -CAL_MOVE_SPEED, CAL_FORWARD_MS);
       break;
     case 'l':
-      runMotorPhase("turn left 90", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_90_MS);
+      runMotorPhase("turn left 90", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_LEFT_90_MS);
       break;
     case 'r':
-      runMotorPhase("turn right 90", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_90_MS);
+      runMotorPhase("turn right 90", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_RIGHT_90_MS);
       break;
     case 't':
       runMotorPhase("turn 360", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_360_MS);

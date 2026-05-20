@@ -149,13 +149,13 @@ void decideNextMove(const SensorReadings& sensors) {
   if (WALL_FOLLOW_LEFT_HAND) {
     if (leftOpen) {
       logState("left open -> turn left", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_90_MS);
+      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
     } else if (frontOpen) {
       logState("front open -> drive forward", sensors);
       beginPhase(WallFollowPhase::DriveForward, CAL_FORWARD_MS);
     } else if (rightOpen) {
       logState("right open -> turn right", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_90_MS);
+      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
     } else {
       logState("dead end -> turn around", sensors);
       beginPhase(WallFollowPhase::TurnAround, WALL_FOLLOW_TURN_AROUND_MS);
@@ -163,13 +163,13 @@ void decideNextMove(const SensorReadings& sensors) {
   } else {
     if (rightOpen) {
       logState("right open -> turn right", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_90_MS);
+      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
     } else if (frontOpen) {
       logState("front open -> drive forward", sensors);
       beginPhase(WallFollowPhase::DriveForward, CAL_FORWARD_MS);
     } else if (leftOpen) {
       logState("left open -> turn left", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_90_MS);
+      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
     } else {
       logState("dead end -> turn around", sensors);
       beginPhase(WallFollowPhase::TurnAround, WALL_FOLLOW_TURN_AROUND_MS);
