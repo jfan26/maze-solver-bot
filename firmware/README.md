@@ -27,6 +27,8 @@ Serial monitor:
 pio device monitor -b 115200
 ```
 
+> USB serial monitor remains supported even when Wi-Fi command bridge is enabled.
+
 ## Hardware smoke test (motors + ToF)
 
 The current `src/main.cpp` has `RUN_HARDWARE_SMOKE_TEST = true` for bring-up.
@@ -96,6 +98,29 @@ After the automatic phase sequence finishes, you can send single-character comma
 - `p`: toggle ToF printout
 - `s`: stop motors
 - `h`: print command help
+
+## Optional wireless command control (Wi-Fi TCP bridge)
+
+Smoke-test mode also supports wireless single-character commands over TCP:
+
+1. Select a mode in `include/config.h`:
+   - `WifiMode::AccessPoint` (default): robot broadcasts its own Wi-Fi SSID.
+   - `WifiMode::Station`: robot joins your existing Wi-Fi using `WIFI_SSID`/`WIFI_PASS`.
+2. Upload firmware (first-time upload is still easiest over USB).
+3. Find the robot IP from startup logs:
+   - AP mode: `[NET] AP IP=...` (usually `192.168.4.1`)
+   - Station mode: `[NET] Wi-Fi connected, IP=...`
+4. Connect from your computer:
+
+```bash
+nc <robot-ip> 2323
+```
+
+Then send the same commands (`h`, `f`, `b`, `l`, `r`, `t`, `p`, `s`) as serial.
+
+### School-network note
+
+If your school network blocks device onboarding, use `WifiMode::AccessPoint` so your laptop connects directly to the robot's broadcasted SSID (`WIFI_AP_SSID`) instead of campus Wi-Fi.
 
 ### Calibration entries to modify
 
