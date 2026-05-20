@@ -9,10 +9,11 @@
 #include "sensors.h"
 
 // Set to false when switching back to maze-solver behavior.
-constexpr bool RUN_HARDWARE_SMOKE_TEST = true;
+constexpr bool RUN_HARDWARE_SMOKE_TEST = false;
 
 static RobotPose g_pose{};
 static SensorReadings g_sensorReadings{};
+static MazeSolverState g_solverState{};
 
 namespace {
 WiFiServer g_cmdServer(WIFI_CMD_PORT);
@@ -207,6 +208,9 @@ void setup() {
     logLine("[SMOKE] Hardware smoke test mode enabled");
     logLine("[SMOKE] Open serial monitor @115200 to view ToF and motor phases");
     connectWifiAndStartCommandServer();
+  } else {
+    logLine("[MAZE] Wall-following mode enabled");
+    initMazeSolver(g_solverState, MazeStrategy::WallFollowing);
   }
 
   // TODO: Initialize wheel encoders and differential-drive odometry state.

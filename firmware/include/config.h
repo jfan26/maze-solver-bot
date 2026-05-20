@@ -71,3 +71,20 @@ constexpr uint16_t FRONT_OBSTACLE_THRESHOLD_MM = 150;
 
 // Control loop period.
 constexpr unsigned long CONTROL_LOOP_PERIOD_MS = 20;
+
+// Wall-following behavior. Tune these after the manual motion calibration.
+// Set to false for right-hand wall following.
+constexpr bool WALL_FOLLOW_LEFT_HAND = true;
+
+// Distances are in meters because the sensor helper functions return meters.
+constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
+constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.10f;
+
+// Proportional steering correction while driving forward along a side wall.
+constexpr float WALL_FOLLOW_KP = 300.0f;
+constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 40;
+
+// Short pause after each open-loop move to reduce overshoot before reading ToF again.
+constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 150;
+constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_90_MS;
