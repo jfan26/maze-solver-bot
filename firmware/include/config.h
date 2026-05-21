@@ -118,6 +118,11 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M =
 // side openings; raise it if it falsely turns left/right while still in a corridor.
 constexpr float WALL_FOLLOW_SIDE_OPEN_M = WALL_FOLLOW_TARGET_SIDE_M + 0.105f;
 
+// Temporary debug clamp: when left-hand wall following is active, ignore any
+// correction that would arc farther left. This isolates whether the leftward
+// bias is coming from the "move closer to the wall" portion of the controller.
+constexpr bool WALL_FOLLOW_DISABLE_LEFT_ARC_CORRECTION = true;
+
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
 // old gains produced only tiny PWM differences at realistic distance errors.
@@ -125,6 +130,11 @@ constexpr float WALL_FOLLOW_KP = 900.0f;
 constexpr float WALL_FOLLOW_KD = 1600.0f;
 constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 65;
 constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
+
+// Emit steering telemetry while driving forward so wall-follow tuning can be
+// correlated with the live ToF readings.
+constexpr bool WALL_FOLLOW_LOG_CORRECTIONS = true;
+constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 
 // Stuck/collision recovery. If all three ToF readings stay almost unchanged
 // while the robot is trying to drive forward, assume the robot is pinned against

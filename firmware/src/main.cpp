@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <cstdarg>
 
 #include "config.h"
+#include "logging.h"
 #include "maze_solver.h"
 #include "motor_driver.h"
 #include "robot_state.h"
@@ -37,20 +37,10 @@ bool g_smokeSequenceDone = false;
 uint32_t g_lastSensorPrintMs = 0;
 uint32_t g_lastSequenceStartMs = 0;
 
-void logLine(const char* line) {
-  Serial.println(line);
+void mirrorLogLineToCommandClient(const char* line) {
   if (g_cmdClient && g_cmdClient.connected()) {
     g_cmdClient.println(line);
   }
-}
-
-void logf(const char* fmt, ...) {
-  char buffer[192];
-  va_list args;
-  va_start(args, fmt);
-  vsnprintf(buffer, sizeof(buffer), fmt, args);
-  va_end(args);
-  logLine(buffer);
 }
 
 void stopTimedMotorAction() {
@@ -255,6 +245,7 @@ void serviceSmokeTestSequence() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+  setLogMirrorCallback(mirrorLogLineToCommandClient);
 
   Serial.println("[BOOT] init motors/sensors");
   initMotors();

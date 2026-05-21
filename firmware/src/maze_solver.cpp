@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "config.h"
+#include "logging.h"
 #include "motor_driver.h"
 
 namespace {
@@ -31,6 +32,7 @@ WallFollowPhase g_nextPhaseAfterSettle = WallFollowPhase::Decide;
 uint32_t g_phaseStartMs = 0;
 uint32_t g_phaseDurationMs = 0;
 uint32_t g_lastLogMs = 0;
+uint32_t g_lastCorrectionLogMs = 0;
 
 SensorReadings g_stuckReference{};
 uint32_t g_stuckWindowStartMs = 0;
@@ -38,6 +40,12 @@ bool g_stuckReferenceValid = false;
 
 float g_previousFollowDistanceM = 0.0f;
 bool g_previousFollowDistanceValid = false;
+
+struct WallCorrectionResult {
+  float distanceErrorM;
+  float distanceDeltaM;
+  int rawCorrection;
+};
 
 bool isFiniteUsableDistance(float distanceM) {
   // VL53L0X returns very large distances when it is out of range. Treat those
@@ -87,8 +95,8 @@ void logState(const char* message, const SensorReadings& sensors) {
     return;
   }
   g_lastLogMs = now;
-  Serial.printf(
-      "[WALL] %s | front=%.3fm left=%.3fm right=%.3fm\n",
+  logf(
+      "[WALL] %s | front=%.3fm left=%.3fm right=%.3fm",
       message,
       sensors.frontDistanceM,
       sensors.leftDistanceM,
@@ -207,7 +215,7 @@ void beginStuckRecovery(const SensorReadings& sensors) {
   beginPhase(WallFollowPhase::BackUp, WALL_FOLLOW_BACKUP_MS);
 }
 
-int computeWallCorrection(float followDistanceM) {
+WallCorrectionResult computeWallCorrection(float followDistanceM) {
   const float distanceErrorM = applyDeadband(
       followDistanceM - WALL_FOLLOW_TARGET_SIDE_M,
       WALL_FOLLOW_DISTANCE_DEADBAND_M);
@@ -222,7 +230,47 @@ int computeWallCorrection(float followDistanceM) {
   g_previousFollowDistanceM = followDistanceM;
   g_previousFollowDistanceValid = true;
 
-  return clampCorrection(WALL_FOLLOW_KP * distanceErrorM + WALL_FOLLOW_KD * distanceDeltaM);
+  return WallCorrectionResult{
+      distanceErrorM,
+      distanceDeltaM,
+      clampCorrection(WALL_FOLLOW_KP * distanceErrorM + WALL_FOLLOW_KD * distanceDeltaM)};
+}
+
+int applyDebugCorrectionClamp(int correction, bool leftHandFollowActive) {
+  if (leftHandFollowActive && WALL_FOLLOW_DISABLE_LEFT_ARC_CORRECTION && correction > 0) {
+    return 0;
+  }
+  return correction;
+}
+
+void maybeLogWallCorrection(
+    const char* followedWallSide,
+    float followDistanceM,
+    const WallCorrectionResult& result,
+    int appliedCorrection,
+    int leftCommand,
+    int rightCommand) {
+  if (!WALL_FOLLOW_LOG_CORRECTIONS) {
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (now - g_lastCorrectionLogMs < WALL_FOLLOW_LOG_PERIOD_MS) {
+    return;
+  }
+
+  g_lastCorrectionLogMs = now;
+  logf(
+      "[WALL] steer side=%s dist=%.3fm target=%.3fm err=%.3fm delta=%.3fm raw=%d applied=%d left=%d right=%d",
+      followedWallSide,
+      followDistanceM,
+      WALL_FOLLOW_TARGET_SIDE_M,
+      result.distanceErrorM,
+      result.distanceDeltaM,
+      result.rawCorrection,
+      appliedCorrection,
+      leftCommand,
+      rightCommand);
 }
 
 void applyContinuousWallCorrection(const SensorReadings& sensors) {
@@ -233,14 +281,18 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
     // Positive correction arcs left; negative correction arcs right.
     // If the left reading is increasing, the robot is drifting away from the
     // left wall, so arc left. If it is decreasing, arc right.
-    const int correction = computeWallCorrection(sensors.leftDistanceM);
+    const WallCorrectionResult result = computeWallCorrection(sensors.leftDistanceM);
+    const int correction = applyDebugCorrectionClamp(result.rawCorrection, true);
     leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED - correction;
     rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED + correction;
+    maybeLogWallCorrection("left", sensors.leftDistanceM, result, correction, leftCommand, rightCommand);
   } else if (!WALL_FOLLOW_LEFT_HAND && !rightIsOpen(sensors)) {
     // Positive correction arcs right; negative correction arcs left.
-    const int correction = computeWallCorrection(sensors.rightDistanceM);
+    const WallCorrectionResult result = computeWallCorrection(sensors.rightDistanceM);
+    const int correction = applyDebugCorrectionClamp(result.rawCorrection, false);
     leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED + correction;
     rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED - correction;
+    maybeLogWallCorrection("right", sensors.rightDistanceM, result, correction, leftCommand, rightCommand);
   } else {
     resetWallCorrectionMemory();
   }
@@ -325,12 +377,13 @@ void initMazeSolver(MazeSolverState& state, MazeStrategy strategy) {
   g_phaseStartMs = millis();
   g_phaseDurationMs = 0;
   g_lastLogMs = 0;
+  g_lastCorrectionLogMs = 0;
   resetStuckDetector();
   resetWallCorrectionMemory();
 
   stopMotors();
-  Serial.printf(
-      "[WALL] initialized: %s-hand wall following, continuous drive enabled\n",
+  logf(
+      "[WALL] initialized: %s-hand wall following, continuous drive enabled",
       WALL_FOLLOW_LEFT_HAND ? "left" : "right");
 }
 
