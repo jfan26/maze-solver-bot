@@ -43,6 +43,7 @@ constexpr int MOTOR_MAX_SPEED = 255;
 // Manual calibration defaults for open-loop movement tests.
 // Increase/decrease durations to tune distance and angle.
 constexpr int CAL_MOVE_SPEED = 140;
+constexpr int WALL_FOLLOW_DRIVE_SPEED = static_cast<int>(CAL_MOVE_SPEED * 0.8f);
 constexpr uint32_t CAL_FORWARD_MS = 600;
 constexpr int CAL_TURN_SPEED = 140;
 
@@ -100,3 +101,8 @@ constexpr float WALL_FOLLOW_STUCK_SIMILAR_DELTA_M = 0.008f;
 constexpr uint32_t WALL_FOLLOW_STUCK_WINDOW_MS = 700;
 constexpr uint32_t WALL_FOLLOW_RECOVERY_REVERSE_MS = 350;
 constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 350;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_SCAN_MS = 500;
+constexpr float WALL_FOLLOW_SIDE_TOO_CLOSE_M = 0.075f;
+constexpr float WALL_FOLLOW_SCAN_TARGET_FRONT_M = 0.20f;
+constexpr float WALL_FOLLOW_SCAN_FRONT_KP = 220.0f;
+constexpr float WALL_FOLLOW_SCAN_SIDE_KP = 340.0f;

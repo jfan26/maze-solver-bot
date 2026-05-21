@@ -18,6 +18,7 @@ enum class WallFollowPhase {
   TurnRight,
   TurnAround,
   RecoveryReverse,
+  RecoveryScan,
   Settle,
   Stopped
 };
@@ -91,7 +92,7 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
 
   switch (phase) {
     case WallFollowPhase::DriveForward:
-      setMotorSpeeds(CAL_MOVE_SPEED, CAL_MOVE_SPEED);
+      setMotorSpeeds(WALL_FOLLOW_DRIVE_SPEED, WALL_FOLLOW_DRIVE_SPEED);
       break;
     case WallFollowPhase::TurnLeft:
       setMotorSpeeds(-CAL_TURN_SPEED, CAL_TURN_SPEED);
@@ -103,7 +104,10 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
       setMotorSpeeds(CAL_TURN_SPEED, -CAL_TURN_SPEED);
       break;
     case WallFollowPhase::RecoveryReverse:
-      setMotorSpeeds(-CAL_MOVE_SPEED, -CAL_MOVE_SPEED);
+      setMotorSpeeds(-WALL_FOLLOW_DRIVE_SPEED, -WALL_FOLLOW_DRIVE_SPEED);
+      break;
+    case WallFollowPhase::RecoveryScan:
+      stopMotors();
       break;
     case WallFollowPhase::Settle:
     case WallFollowPhase::Stopped:
@@ -134,23 +138,34 @@ void driveForwardWithWallCorrection(const SensorReadings& sensors) {
     return;
   }
 
-  int leftCommand = CAL_MOVE_SPEED;
-  int rightCommand = CAL_MOVE_SPEED;
+  int leftCommand = WALL_FOLLOW_DRIVE_SPEED;
+  int rightCommand = WALL_FOLLOW_DRIVE_SPEED;
 
   if (WALL_FOLLOW_LEFT_HAND && !leftIsOpen(sensors)) {
     // If left distance is larger than target, robot is too far from left wall:
     // slow left motor and speed right motor to arc left.
     const float errorM = sensors.leftDistanceM - WALL_FOLLOW_TARGET_SIDE_M;
     const int correction = clampCorrection(WALL_FOLLOW_KP * errorM);
-    leftCommand = CAL_MOVE_SPEED - correction;
-    rightCommand = CAL_MOVE_SPEED + correction;
+    leftCommand = WALL_FOLLOW_DRIVE_SPEED - correction;
+    rightCommand = WALL_FOLLOW_DRIVE_SPEED + correction;
   } else if (!WALL_FOLLOW_LEFT_HAND && !rightIsOpen(sensors)) {
     // If right distance is larger than target, robot is too far from right wall:
     // speed left motor and slow right motor to arc right.
     const float errorM = sensors.rightDistanceM - WALL_FOLLOW_TARGET_SIDE_M;
     const int correction = clampCorrection(WALL_FOLLOW_KP * errorM);
-    leftCommand = CAL_MOVE_SPEED + correction;
-    rightCommand = CAL_MOVE_SPEED - correction;
+    leftCommand = WALL_FOLLOW_DRIVE_SPEED + correction;
+    rightCommand = WALL_FOLLOW_DRIVE_SPEED - correction;
+  }
+
+  // Hard safety correction if hugging the followed wall too tightly.
+  if (WALL_FOLLOW_LEFT_HAND && isFiniteUsableDistance(sensors.leftDistanceM) &&
+      sensors.leftDistanceM < WALL_FOLLOW_SIDE_TOO_CLOSE_M) {
+    leftCommand += WALL_FOLLOW_CORRECTION_LIMIT;
+    rightCommand -= WALL_FOLLOW_CORRECTION_LIMIT;
+  } else if (!WALL_FOLLOW_LEFT_HAND && isFiniteUsableDistance(sensors.rightDistanceM) &&
+             sensors.rightDistanceM < WALL_FOLLOW_SIDE_TOO_CLOSE_M) {
+    leftCommand -= WALL_FOLLOW_CORRECTION_LIMIT;
+    rightCommand += WALL_FOLLOW_CORRECTION_LIMIT;
   }
 
   // Trend-based correction over time: if left distance is shrinking while moving
@@ -213,10 +228,39 @@ void driveForwardWithWallCorrection(const SensorReadings& sensors) {
   g_stuckBaselineMs = now;
 
   if (nearlyUnchanged) {
-    logState("stuck detected -> reverse then re-evaluate", sensors);
-    g_nextPhaseAfterSettle =
-        (WALL_FOLLOW_LEFT_HAND ? WallFollowPhase::TurnRight : WallFollowPhase::TurnLeft);
+    logState("stuck detected -> reverse then sensor-guided scan", sensors);
+    g_nextPhaseAfterSettle = WallFollowPhase::RecoveryScan;
     beginPhase(WallFollowPhase::RecoveryReverse, WALL_FOLLOW_RECOVERY_REVERSE_MS);
+  }
+}
+
+void doSensorGuidedRecoveryScan(const SensorReadings& sensors) {
+  // Differential turn command: bias away from nearby side wall and toward
+  // larger front clearance without using fixed angles.
+  float sideBias = 0.0f;
+  if (isFiniteUsableDistance(sensors.leftDistanceM) && isFiniteUsableDistance(sensors.rightDistanceM)) {
+    sideBias = (sensors.rightDistanceM - sensors.leftDistanceM);
+  } else if (isFiniteUsableDistance(sensors.leftDistanceM)) {
+    sideBias = -sensors.leftDistanceM;
+  } else if (isFiniteUsableDistance(sensors.rightDistanceM)) {
+    sideBias = sensors.rightDistanceM;
+  }
+
+  float frontBias = 0.0f;
+  if (isFiniteUsableDistance(sensors.frontDistanceM)) {
+    frontBias = sensors.frontDistanceM - WALL_FOLLOW_SCAN_TARGET_FRONT_M;
+  }
+
+  const int turn = clampCorrection(
+      WALL_FOLLOW_SCAN_SIDE_KP * sideBias + WALL_FOLLOW_SCAN_FRONT_KP * frontBias);
+
+  // Rotate in place with variable rate; sign controls direction.
+  const int minTurn = 55;
+  int spin = constrain(abs(turn), minTurn, CAL_TURN_SPEED);
+  if (turn < 0) {
+    setMotorSpeeds(spin, -spin);
+  } else {
+    setMotorSpeeds(-spin, spin);
   }
 }
 
@@ -299,18 +343,23 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
     case WallFollowPhase::TurnAround:
     case WallFollowPhase::RecoveryReverse:
       if (phaseElapsed()) {
-        if (g_phase == WallFollowPhase::RecoveryReverse &&
-            (g_nextPhaseAfterSettle == WallFollowPhase::TurnLeft ||
-             g_nextPhaseAfterSettle == WallFollowPhase::TurnRight)) {
-          beginPhase(g_nextPhaseAfterSettle, WALL_FOLLOW_RECOVERY_TURN_MS);
-          g_nextPhaseAfterSettle = WallFollowPhase::Decide;
-        } else if (g_nextPhaseAfterSettle == WallFollowPhase::TurnLeft ||
+        if (g_nextPhaseAfterSettle == WallFollowPhase::TurnLeft ||
             g_nextPhaseAfterSettle == WallFollowPhase::TurnRight) {
           beginPhase(g_nextPhaseAfterSettle, WALL_FOLLOW_RECOVERY_TURN_MS);
+          g_nextPhaseAfterSettle = WallFollowPhase::Decide;
+        } else if (g_phase == WallFollowPhase::RecoveryReverse &&
+                   g_nextPhaseAfterSettle == WallFollowPhase::RecoveryScan) {
+          beginPhase(WallFollowPhase::RecoveryScan, WALL_FOLLOW_RECOVERY_SCAN_MS);
           g_nextPhaseAfterSettle = WallFollowPhase::Decide;
         } else {
           settleThen(WallFollowPhase::Decide);
         }
+      }
+      break;
+    case WallFollowPhase::RecoveryScan:
+      doSensorGuidedRecoveryScan(sensors);
+      if (phaseElapsed()) {
+        settleThen(WallFollowPhase::Decide);
       }
       break;
 
