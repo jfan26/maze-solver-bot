@@ -16,6 +16,19 @@ int clampMotorCommand(int command) {
   return command;
 }
 
+int applyLeftStraightTrim(int left, int right) {
+  const bool sameDirection = (left > 0 && right > 0) || (left < 0 && right < 0);
+  if (!sameDirection) {
+    return left;
+  }
+
+  if (left > 0) {
+    return clampMotorCommand(left + CAL_LEFT_TRIM_FORWARD);
+  }
+
+  return clampMotorCommand(left - CAL_LEFT_TRIM_REVERSE);
+}
+
 void writeSingleMotor(int in1Pin, int in2Pin, int command, bool inverted) {
   int output = clampMotorCommand(command);
   if (inverted) {
@@ -49,7 +62,8 @@ void initMotors() {
 }
 
 void setMotorSpeeds(int left, int right) {
-  writeSingleMotor(LEFT_MOTOR_IN1, LEFT_MOTOR_IN2, left, LEFT_MOTOR_INVERTED);
+  const int adjustedLeft = applyLeftStraightTrim(left, right);
+  writeSingleMotor(LEFT_MOTOR_IN1, LEFT_MOTOR_IN2, adjustedLeft, LEFT_MOTOR_INVERTED);
   writeSingleMotor(RIGHT_MOTOR_IN1, RIGHT_MOTOR_IN2, right, RIGHT_MOTOR_INVERTED);
 }
 

@@ -43,6 +43,10 @@ constexpr int MOTOR_MAX_SPEED = 255;
 // Manual calibration defaults for open-loop movement tests.
 // Increase/decrease durations to tune distance and angle.
 constexpr int CAL_MOVE_SPEED = 140;
+// Extra PWM added to the left motor when both wheels are driving in the same
+// direction. Increase these if the left wheel still stalls early.
+constexpr int CAL_LEFT_TRIM_FORWARD = 20;
+constexpr int CAL_LEFT_TRIM_REVERSE = 20;
 constexpr uint32_t CAL_FORWARD_MS = 600;
 constexpr int CAL_TURN_SPEED = 140;
 
