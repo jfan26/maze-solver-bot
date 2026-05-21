@@ -50,6 +50,11 @@ constexpr int CAL_TURN_SPEED = 140;
 constexpr uint32_t CAL_TURN_LEFT_90_MS = 540;
 constexpr uint32_t CAL_TURN_RIGHT_90_MS = 430;
 
+// Manual l/r commands now use 30-degree increments so fine steering does not
+// affect the solver's 90-degree turn calibration.
+constexpr uint32_t CAL_TURN_LEFT_30_MS = CAL_TURN_LEFT_90_MS / 3;
+constexpr uint32_t CAL_TURN_RIGHT_30_MS = CAL_TURN_RIGHT_90_MS / 3;
+
 // 360 command in manual mode spins clockwise, so base it on right-turn timing
 constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_RIGHT_90_MS;
 

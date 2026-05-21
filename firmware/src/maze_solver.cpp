@@ -8,8 +8,9 @@
 namespace {
 
 // This implementation uses a simple left-hand or right-hand wall-following rule.
-// It assumes CAL_FORWARD_MS moves approximately one maze cell and CAL_TURN_90_MS
-// turns approximately 90 degrees. Tune those first using smoke-test/manual mode.
+// It assumes CAL_FORWARD_MS moves approximately one maze cell and the 90-degree
+// turn constants move approximately 90 degrees. Tune those first using
+// smoke-test/manual mode.
 
 enum class WallFollowPhase {
   Decide,
