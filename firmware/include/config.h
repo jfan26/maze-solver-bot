@@ -118,10 +118,17 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M =
 // side openings; raise it if it falsely turns left/right while still in a corridor.
 constexpr float WALL_FOLLOW_SIDE_OPEN_M = WALL_FOLLOW_TARGET_SIDE_M + 0.105f;
 
-// Temporary debug clamp: when left-hand wall following is active, ignore any
-// correction that would arc farther left. This isolates whether the leftward
-// bias is coming from the "move closer to the wall" portion of the controller.
-constexpr bool WALL_FOLLOW_DISABLE_LEFT_ARC_CORRECTION = true;
+// Reject impossible/ambiguous side readings when deciding whether a side is
+// open. This is important because the VL53L0X can report 0 mm or a huge
+// out-of-range value when it is too close to a wall or times out. Those readings
+// should NOT make a left-hand follower immediately command a left turn.
+constexpr float WALL_FOLLOW_SIDE_MIN_VALID_M = 0.015f;
+constexpr float WALL_FOLLOW_SIDE_MAX_OPEN_VALID_M = 1.000f;
+
+// If true, left-hand following is prevented from steering farther left during
+// forward correction. Leave this false for normal wall following; the side-open
+// filter above is the actual fix for the false left-turn problem.
+constexpr bool WALL_FOLLOW_DISABLE_LEFT_ARC_CORRECTION = false;
 
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
