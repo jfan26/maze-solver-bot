@@ -89,7 +89,14 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.10f;
 // Proportional steering correction while driving forward along a side wall.
 constexpr float WALL_FOLLOW_KP = 300.0f;
 constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 40;
+constexpr float WALL_FOLLOW_TREND_KP = 8000.0f;  // sensor-distance trend (m/s) -> speed delta
 
 // Short pause after each open-loop move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 150;
 constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_RIGHT_90_MS;
+
+// Stuck detection/recovery while commanding forward movement.
+constexpr float WALL_FOLLOW_STUCK_SIMILAR_DELTA_M = 0.008f;
+constexpr uint32_t WALL_FOLLOW_STUCK_WINDOW_MS = 700;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_REVERSE_MS = 350;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 350;

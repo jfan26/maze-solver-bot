@@ -17,6 +17,7 @@ enum class WallFollowPhase {
   TurnLeft,
   TurnRight,
   TurnAround,
+  RecoveryReverse,
   Settle,
   Stopped
 };
@@ -27,6 +28,12 @@ WallFollowPhase g_nextPhaseAfterSettle = WallFollowPhase::Decide;
 uint32_t g_phaseStartMs = 0;
 uint32_t g_phaseDurationMs = 0;
 uint32_t g_lastLogMs = 0;
+bool g_haveTrendBaseline = false;
+SensorReadings g_trendBaseline{};
+uint32_t g_trendBaselineMs = 0;
+bool g_haveStuckBaseline = false;
+SensorReadings g_stuckBaseline{};
+uint32_t g_stuckBaselineMs = 0;
 
 bool isFiniteUsableDistance(float distanceM) {
   // VL53L0X returns very large distances when it is out of range. Treat those
@@ -95,11 +102,19 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
     case WallFollowPhase::TurnAround:
       setMotorSpeeds(CAL_TURN_SPEED, -CAL_TURN_SPEED);
       break;
+    case WallFollowPhase::RecoveryReverse:
+      setMotorSpeeds(-CAL_MOVE_SPEED, -CAL_MOVE_SPEED);
+      break;
     case WallFollowPhase::Settle:
     case WallFollowPhase::Stopped:
     case WallFollowPhase::Decide:
       stopMotors();
       break;
+  }
+
+  if (phase != WallFollowPhase::DriveForward) {
+    g_haveTrendBaseline = false;
+    g_haveStuckBaseline = false;
   }
 }
 
@@ -138,7 +153,71 @@ void driveForwardWithWallCorrection(const SensorReadings& sensors) {
     rightCommand = CAL_MOVE_SPEED - correction;
   }
 
+  // Trend-based correction over time: if left distance is shrinking while moving
+  // forward, bias a right correction (and vice versa for right-hand following).
+  const uint32_t now = millis();
+  if (!g_haveTrendBaseline) {
+    g_haveTrendBaseline = true;
+    g_trendBaseline = sensors;
+    g_trendBaselineMs = now;
+  } else {
+    const uint32_t dtMs = now - g_trendBaselineMs;
+    if (dtMs >= 100) {
+      const float dtSec = static_cast<float>(dtMs) / 1000.0f;
+      float trendCorrection = 0.0f;
+      if (WALL_FOLLOW_LEFT_HAND && isFiniteUsableDistance(sensors.leftDistanceM) &&
+          isFiniteUsableDistance(g_trendBaseline.leftDistanceM)) {
+        const float slope = (sensors.leftDistanceM - g_trendBaseline.leftDistanceM) / dtSec;
+        trendCorrection = -WALL_FOLLOW_TREND_KP * slope;
+      } else if (!WALL_FOLLOW_LEFT_HAND && isFiniteUsableDistance(sensors.rightDistanceM) &&
+                 isFiniteUsableDistance(g_trendBaseline.rightDistanceM)) {
+        const float slope = (sensors.rightDistanceM - g_trendBaseline.rightDistanceM) / dtSec;
+        trendCorrection = WALL_FOLLOW_TREND_KP * slope;
+      }
+
+      const int trend = clampCorrection(trendCorrection);
+      leftCommand += trend;
+      rightCommand -= trend;
+      g_trendBaseline = sensors;
+      g_trendBaselineMs = now;
+    }
+  }
+
+  leftCommand = constrain(leftCommand, MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);
+  rightCommand = constrain(rightCommand, MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);
+
   setMotorSpeeds(leftCommand, rightCommand);
+
+  // Stuck detection: commands are being sent but distances barely change.
+  if (!g_haveStuckBaseline) {
+    g_haveStuckBaseline = true;
+    g_stuckBaseline = sensors;
+    g_stuckBaselineMs = now;
+    return;
+  }
+
+  const uint32_t stuckDtMs = now - g_stuckBaselineMs;
+  if (stuckDtMs < WALL_FOLLOW_STUCK_WINDOW_MS) {
+    return;
+  }
+
+  const float frontDelta = fabsf(sensors.frontDistanceM - g_stuckBaseline.frontDistanceM);
+  const float leftDelta = fabsf(sensors.leftDistanceM - g_stuckBaseline.leftDistanceM);
+  const float rightDelta = fabsf(sensors.rightDistanceM - g_stuckBaseline.rightDistanceM);
+  const bool nearlyUnchanged =
+      frontDelta < WALL_FOLLOW_STUCK_SIMILAR_DELTA_M &&
+      leftDelta < WALL_FOLLOW_STUCK_SIMILAR_DELTA_M &&
+      rightDelta < WALL_FOLLOW_STUCK_SIMILAR_DELTA_M;
+
+  g_stuckBaseline = sensors;
+  g_stuckBaselineMs = now;
+
+  if (nearlyUnchanged) {
+    logState("stuck detected -> reverse then re-evaluate", sensors);
+    g_nextPhaseAfterSettle =
+        (WALL_FOLLOW_LEFT_HAND ? WallFollowPhase::TurnRight : WallFollowPhase::TurnLeft);
+    beginPhase(WallFollowPhase::RecoveryReverse, WALL_FOLLOW_RECOVERY_REVERSE_MS);
+  }
 }
 
 void decideNextMove(const SensorReadings& sensors) {
@@ -189,6 +268,8 @@ void initMazeSolver(MazeSolverState& state, MazeStrategy strategy) {
   g_phaseStartMs = millis();
   g_phaseDurationMs = 0;
   g_lastLogMs = 0;
+  g_haveTrendBaseline = false;
+  g_haveStuckBaseline = false;
 
   stopMotors();
   Serial.printf(
@@ -211,16 +292,25 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
 
     case WallFollowPhase::DriveForward:
       driveForwardWithWallCorrection(sensors);
-      if (phaseElapsed()) {
-        settleThen(WallFollowPhase::Decide);
-      }
       break;
 
     case WallFollowPhase::TurnLeft:
     case WallFollowPhase::TurnRight:
     case WallFollowPhase::TurnAround:
+    case WallFollowPhase::RecoveryReverse:
       if (phaseElapsed()) {
-        settleThen(WallFollowPhase::Decide);
+        if (g_phase == WallFollowPhase::RecoveryReverse &&
+            (g_nextPhaseAfterSettle == WallFollowPhase::TurnLeft ||
+             g_nextPhaseAfterSettle == WallFollowPhase::TurnRight)) {
+          beginPhase(g_nextPhaseAfterSettle, WALL_FOLLOW_RECOVERY_TURN_MS);
+          g_nextPhaseAfterSettle = WallFollowPhase::Decide;
+        } else if (g_nextPhaseAfterSettle == WallFollowPhase::TurnLeft ||
+            g_nextPhaseAfterSettle == WallFollowPhase::TurnRight) {
+          beginPhase(g_nextPhaseAfterSettle, WALL_FOLLOW_RECOVERY_TURN_MS);
+          g_nextPhaseAfterSettle = WallFollowPhase::Decide;
+        } else {
+          settleThen(WallFollowPhase::Decide);
+        }
       }
       break;
 
