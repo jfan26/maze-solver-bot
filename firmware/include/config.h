@@ -55,8 +55,13 @@ constexpr int CAL_FORWARD_RIGHT_SPEED = 140;
 
 // Autonomous wall-following should usually be slower than manual straight-line
 // tests, otherwise the ToF feedback cannot steer before the robot scrapes a wall.
-constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED = 105;
-constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED = 105;
+constexpr int WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED = 105;
+constexpr int WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED = 105;
+constexpr int WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT = 65;
+constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED =
+    (WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
+constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED =
+    (WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
 
 // This is still used by manual f/b tests, but the autonomous wall follower no
 // longer drives forward for one fixed cell-sized duration.
@@ -101,27 +106,33 @@ constexpr bool WALL_FOLLOW_LEFT_HAND = true;
 // Distances are in meters because the sensor helper functions return meters.
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
 
-// Side-wall geometry calibration.
-// The robot body is approximately an octagon with 50 mm inner radius/apothem.
-// Side ToF readings are measured from the sensor lens, not from the outside edge
-// of the robot. If the side sensor lens is recessed inward from the nearest body
-// edge, include that inset here. With the default 45 mm inset and 30 mm desired
-// body clearance, the side ToF target is 75 mm.
-constexpr float ROBOT_INNER_RADIUS_M = 0.050f;
-constexpr float SIDE_TOF_SENSOR_INSET_FROM_BODY_EDGE_M = 0.045f;
-constexpr float WALL_FOLLOW_BODY_CLEARANCE_M = 0.030f;
-constexpr float WALL_FOLLOW_TARGET_SIDE_M =
-    WALL_FOLLOW_BODY_CLEARANCE_M + SIDE_TOF_SENSOR_INSET_FROM_BODY_EDGE_M;
+// Empirically tuned side-wall distances. These are measured from the sensor to
+// the wall, not from the robot body edge. The body is thicker than the earlier
+// geometry estimate, so use explicit thresholds instead of deriving them from
+// the old inset/clearance model.
+constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.125f;
 
-// Treat the followed side as an opening only when the side reading is much larger
-// than the normal wall-following distance. Lower this if the robot overshoots
-// side openings; raise it if it falsely turns left/right while still in a corridor.
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = WALL_FOLLOW_TARGET_SIDE_M + 0.105f;
+// Treat the followed side as an opening only when it stretches well beyond the
+// normal tracking distance; this is the threshold that triggers left/right turn
+// decisions at side branches.
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.175f;
 
-// Temporary debug clamp: when left-hand wall following is active, ignore any
-// correction that would arc farther left. This isolates whether the leftward
-// bias is coming from the "move closer to the wall" portion of the controller.
-constexpr bool WALL_FOLLOW_DISABLE_LEFT_ARC_CORRECTION = true;
+// When the wall follower decides to take a side opening, keep driving forward
+// for a short fixed time before turning so the robot's center enters the branch
+// before the pivot starts. One "pulse" here is one control-loop update.
+constexpr uint16_t WALL_FOLLOW_OPENING_ADVANCE_TICKS = 24;
+constexpr uint32_t WALL_FOLLOW_OPENING_ADVANCE_MS =
+    static_cast<uint32_t>(WALL_FOLLOW_OPENING_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
+
+// Cap how much the controller may steer toward the followed wall in a single
+// update. Positive correction always means "arc toward the followed wall" for
+// both left-hand and right-hand following. Set to 0 to disable those nudges.
+constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 12;
+
+// Leave a small neutral band around the target distance so the robot does not
+// keep flipping between "steer toward wall" and "steer away from wall" around
+// the setpoint.
+constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.005f;
 
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
