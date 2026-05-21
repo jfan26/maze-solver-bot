@@ -85,6 +85,7 @@ constexpr bool WALL_FOLLOW_LEFT_HAND = true;
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
 constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
 constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.10f;
+constexpr int WALL_FOLLOW_FORWARD_SPEED = CAL_MOVE_SPEED / 2;
 
 // Proportional steering correction while driving forward along a side wall.
 constexpr float WALL_FOLLOW_KP = 300.0f;

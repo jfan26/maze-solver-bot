@@ -91,7 +91,7 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
 
   switch (phase) {
     case WallFollowPhase::DriveForward:
-      setMotorSpeeds(CAL_MOVE_SPEED, CAL_MOVE_SPEED);
+      setMotorSpeeds(WALL_FOLLOW_FORWARD_SPEED, WALL_FOLLOW_FORWARD_SPEED);
       break;
     case WallFollowPhase::TurnLeft:
       setMotorSpeeds(-CAL_TURN_SPEED, CAL_TURN_SPEED);
@@ -134,23 +134,23 @@ void driveForwardWithWallCorrection(const SensorReadings& sensors) {
     return;
   }
 
-  int leftCommand = CAL_MOVE_SPEED;
-  int rightCommand = CAL_MOVE_SPEED;
+  int leftCommand = WALL_FOLLOW_FORWARD_SPEED;
+  int rightCommand = WALL_FOLLOW_FORWARD_SPEED;
 
   if (WALL_FOLLOW_LEFT_HAND && !leftIsOpen(sensors)) {
     // If left distance is larger than target, robot is too far from left wall:
     // slow left motor and speed right motor to arc left.
     const float errorM = sensors.leftDistanceM - WALL_FOLLOW_TARGET_SIDE_M;
     const int correction = clampCorrection(WALL_FOLLOW_KP * errorM);
-    leftCommand = CAL_MOVE_SPEED - correction;
-    rightCommand = CAL_MOVE_SPEED + correction;
+    leftCommand = WALL_FOLLOW_FORWARD_SPEED - correction;
+    rightCommand = WALL_FOLLOW_FORWARD_SPEED + correction;
   } else if (!WALL_FOLLOW_LEFT_HAND && !rightIsOpen(sensors)) {
     // If right distance is larger than target, robot is too far from right wall:
     // speed left motor and slow right motor to arc right.
     const float errorM = sensors.rightDistanceM - WALL_FOLLOW_TARGET_SIDE_M;
     const int correction = clampCorrection(WALL_FOLLOW_KP * errorM);
-    leftCommand = CAL_MOVE_SPEED + correction;
-    rightCommand = CAL_MOVE_SPEED - correction;
+    leftCommand = WALL_FOLLOW_FORWARD_SPEED + correction;
+    rightCommand = WALL_FOLLOW_FORWARD_SPEED - correction;
   }
 
   // Trend-based correction over time: if left distance is shrinking while moving
