@@ -35,6 +35,10 @@ constexpr uint8_t TOF_RIGHT_ADDR = 0x32;
 constexpr int I2C_SDA_PIN = SDA;
 constexpr int I2C_SCL_PIN = SCL;
 
+// VL53L0X continuous-read period. The control loop is 20 ms, so 30 ms gives
+// fresher distance updates than the previous 50 ms without being too aggressive.
+constexpr uint16_t TOF_CONTINUOUS_PERIOD_MS = 30;
+
 // Motor speed limits.
 constexpr int MOTOR_MIN_SPEED = -255;
 constexpr int MOTOR_MAX_SPEED = 255;
@@ -48,6 +52,11 @@ constexpr int CAL_MOVE_SPEED = 140;
 // consistently curves when both motors are commanded to the same PWM value.
 constexpr int CAL_FORWARD_LEFT_SPEED = 140;
 constexpr int CAL_FORWARD_RIGHT_SPEED = 140;
+
+// Autonomous wall-following should usually be slower than manual straight-line
+// tests, otherwise the ToF feedback cannot steer before the robot scrapes a wall.
+constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED = 105;
+constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED = 105;
 
 // This is still used by manual f/b tests, but the autonomous wall follower no
 // longer drives forward for one fixed cell-sized duration.
@@ -91,29 +100,43 @@ constexpr bool WALL_FOLLOW_LEFT_HAND = true;
 
 // Distances are in meters because the sensor helper functions return meters.
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
-constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.10f;
+
+// Side-wall geometry calibration.
+// The robot body is approximately an octagon with 50 mm inner radius/apothem.
+// Side ToF readings are measured from the sensor lens, not from the outside edge
+// of the robot. If the side sensor lens is recessed inward from the nearest body
+// edge, include that inset here. With the default 45 mm inset and 30 mm desired
+// body clearance, the side ToF target is 75 mm.
+constexpr float ROBOT_INNER_RADIUS_M = 0.050f;
+constexpr float SIDE_TOF_SENSOR_INSET_FROM_BODY_EDGE_M = 0.045f;
+constexpr float WALL_FOLLOW_BODY_CLEARANCE_M = 0.030f;
+constexpr float WALL_FOLLOW_TARGET_SIDE_M =
+    WALL_FOLLOW_BODY_CLEARANCE_M + SIDE_TOF_SENSOR_INSET_FROM_BODY_EDGE_M;
+
+// Treat the followed side as an opening only when the side reading is much larger
+// than the normal wall-following distance. Lower this if the robot overshoots
+// side openings; raise it if it falsely turns left/right while still in a corridor.
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = WALL_FOLLOW_TARGET_SIDE_M + 0.105f;
 
 // Continuous proportional/derivative steering correction while driving forward
-// along a side wall. KP corrects distance from the target wall spacing; KD
-// reacts when the side wall reading is changing, which helps keep the robot
-// roughly parallel to the followed wall.
-constexpr float WALL_FOLLOW_KP = 300.0f;
-constexpr float WALL_FOLLOW_KD = 900.0f;
-constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 55;
-constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.005f;
+// along a side wall. These are intentionally stronger than before because the
+// old gains produced only tiny PWM differences at realistic distance errors.
+constexpr float WALL_FOLLOW_KP = 900.0f;
+constexpr float WALL_FOLLOW_KD = 1600.0f;
+constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 65;
+constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
 
 // Stuck/collision recovery. If all three ToF readings stay almost unchanged
 // while the robot is trying to drive forward, assume the robot is pinned against
 // something: back up briefly, then turn slightly away from the followed wall.
 constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.006f;
 constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
-constexpr uint32_t WALL_FOLLOW_STUCK_MS = 350;
-constexpr int WALL_FOLLOW_BACKUP_SPEED = 110;
-constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 250;
+constexpr uint32_t WALL_FOLLOW_STUCK_MS = 180;
+constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
+constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
 constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
-constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 140;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 75;
 
 // Short pause after each turn/recovery move to reduce overshoot before reading ToF again.
-constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 150;
+constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 60;
 constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_RIGHT_90_MS;

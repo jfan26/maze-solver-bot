@@ -25,7 +25,7 @@ bool initSingleSensor(VL53L0X& sensor, uint8_t xshutPin, uint8_t addr, const cha
   }
 
   sensor.setAddress(addr);
-  sensor.startContinuous(50);
+  sensor.startContinuous(TOF_CONTINUOUS_PERIOD_MS);
   Serial.printf("[ToF] %s initialized at 0x%02X\n", name, addr);
   return true;
 }

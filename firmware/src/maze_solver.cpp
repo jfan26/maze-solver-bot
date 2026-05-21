@@ -158,7 +158,7 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
 
   switch (phase) {
     case WallFollowPhase::DriveForward:
-      setMotorSpeeds(CAL_FORWARD_LEFT_SPEED, CAL_FORWARD_RIGHT_SPEED);
+      setMotorSpeeds(WALL_FOLLOW_FORWARD_LEFT_SPEED, WALL_FOLLOW_FORWARD_RIGHT_SPEED);
       break;
     case WallFollowPhase::TurnLeft:
       setMotorSpeeds(-CAL_TURN_SPEED, CAL_TURN_SPEED);
@@ -226,21 +226,21 @@ int computeWallCorrection(float followDistanceM) {
 }
 
 void applyContinuousWallCorrection(const SensorReadings& sensors) {
-  int leftCommand = CAL_FORWARD_LEFT_SPEED;
-  int rightCommand = CAL_FORWARD_RIGHT_SPEED;
+  int leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED;
+  int rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED;
 
   if (WALL_FOLLOW_LEFT_HAND && !leftIsOpen(sensors)) {
     // Positive correction arcs left; negative correction arcs right.
     // If the left reading is increasing, the robot is drifting away from the
     // left wall, so arc left. If it is decreasing, arc right.
     const int correction = computeWallCorrection(sensors.leftDistanceM);
-    leftCommand = CAL_FORWARD_LEFT_SPEED - correction;
-    rightCommand = CAL_FORWARD_RIGHT_SPEED + correction;
+    leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED - correction;
+    rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED + correction;
   } else if (!WALL_FOLLOW_LEFT_HAND && !rightIsOpen(sensors)) {
     // Positive correction arcs right; negative correction arcs left.
     const int correction = computeWallCorrection(sensors.rightDistanceM);
-    leftCommand = CAL_FORWARD_LEFT_SPEED + correction;
-    rightCommand = CAL_FORWARD_RIGHT_SPEED - correction;
+    leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED + correction;
+    rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED - correction;
   } else {
     resetWallCorrectionMemory();
   }
