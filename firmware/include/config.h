@@ -43,6 +43,14 @@ constexpr int MOTOR_MAX_SPEED = 255;
 // Manual calibration defaults for open-loop movement tests.
 // Increase/decrease durations to tune distance and angle.
 constexpr int CAL_MOVE_SPEED = 140;
+
+// Straight-line forward calibration. Tune these independently if the robot
+// consistently curves when both motors are commanded to the same PWM value.
+constexpr int CAL_FORWARD_LEFT_SPEED = 140;
+constexpr int CAL_FORWARD_RIGHT_SPEED = 140;
+
+// This is still used by manual f/b tests, but the autonomous wall follower no
+// longer drives forward for one fixed cell-sized duration.
 constexpr uint32_t CAL_FORWARD_MS = 600;
 constexpr int CAL_TURN_SPEED = 140;
 
@@ -85,19 +93,27 @@ constexpr bool WALL_FOLLOW_LEFT_HAND = true;
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
 constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
 constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.10f;
-constexpr int WALL_FOLLOW_FORWARD_SPEED = CAL_MOVE_SPEED / 2;
 
-// Proportional steering correction while driving forward along a side wall.
+// Continuous proportional/derivative steering correction while driving forward
+// along a side wall. KP corrects distance from the target wall spacing; KD
+// reacts when the side wall reading is changing, which helps keep the robot
+// roughly parallel to the followed wall.
 constexpr float WALL_FOLLOW_KP = 300.0f;
-constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 40;
-constexpr float WALL_FOLLOW_TREND_KP = 8000.0f;  // sensor-distance trend (m/s) -> speed delta
+constexpr float WALL_FOLLOW_KD = 900.0f;
+constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 55;
+constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.005f;
 
-// Short pause after each open-loop move to reduce overshoot before reading ToF again.
+// Stuck/collision recovery. If all three ToF readings stay almost unchanged
+// while the robot is trying to drive forward, assume the robot is pinned against
+// something: back up briefly, then turn slightly away from the followed wall.
+constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.006f;
+constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
+constexpr uint32_t WALL_FOLLOW_STUCK_MS = 350;
+constexpr int WALL_FOLLOW_BACKUP_SPEED = 110;
+constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 250;
+constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 140;
+
+// Short pause after each turn/recovery move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 150;
 constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_RIGHT_90_MS;
-
-// Stuck detection/recovery while commanding forward movement.
-constexpr float WALL_FOLLOW_STUCK_SIMILAR_DELTA_M = 0.008f;
-constexpr uint32_t WALL_FOLLOW_STUCK_WINDOW_MS = 700;
-constexpr uint32_t WALL_FOLLOW_RECOVERY_REVERSE_MS = 350;
-constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 350;

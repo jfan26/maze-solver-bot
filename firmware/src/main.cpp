@@ -167,10 +167,10 @@ void executeManualCommand(char command) {
       printManualControlHelp();
       break;
     case 'f':
-      startTimedMotorAction("forward calibrated", CAL_MOVE_SPEED, CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      startTimedMotorAction("forward calibrated", CAL_FORWARD_LEFT_SPEED, CAL_FORWARD_RIGHT_SPEED, CAL_FORWARD_MS);
       break;
     case 'b':
-      startTimedMotorAction("reverse calibrated", -CAL_MOVE_SPEED, -CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      startTimedMotorAction("reverse calibrated", -CAL_FORWARD_LEFT_SPEED, -CAL_FORWARD_RIGHT_SPEED, CAL_FORWARD_MS);
       break;
     case 'l':
       startTimedMotorAction("turn left 90", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_LEFT_90_MS);
