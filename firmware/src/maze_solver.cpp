@@ -21,6 +21,8 @@ enum class WallFollowPhase {
   TurnRight,
   TurnAround,
   BackUp,
+  RecoveryTurnAway,
+  OpeningPostTurnAdvance,
   Settle,
   Stopped
 };
@@ -40,6 +42,7 @@ uint32_t g_lastLogMs = 0;
 uint32_t g_lastCorrectionLogMs = 0;
 DeferredOpeningTurn g_deferredOpeningTurn = DeferredOpeningTurn::None;
 uint32_t g_deferredOpeningTurnStartMs = 0;
+bool g_postTurnAdvancePending = false;
 
 SensorReadings g_stuckReference{};
 uint32_t g_stuckWindowStartMs = 0;
@@ -147,24 +150,7 @@ bool readingsStayedConstant(const SensorReadings& sensors, const SensorReadings&
          fabsf(sensors.rightDistanceM - reference.rightDistanceM) <= WALL_FOLLOW_STUCK_DELTA_M;
 }
 
-bool geometrySuggestsContactOrPinning(const SensorReadings& sensors) {
-  const float followedSideDistanceM = WALL_FOLLOW_LEFT_HAND ? sensors.leftDistanceM : sensors.rightDistanceM;
-  const bool frontIsNear = isFiniteUsableDistance(sensors.frontDistanceM) &&
-                           sensors.frontDistanceM < WALL_FOLLOW_STUCK_FRONT_NEAR_M;
-  const bool followedSideTooClose = isFiniteUsableDistance(followedSideDistanceM) &&
-                                    followedSideDistanceM < WALL_FOLLOW_STUCK_SIDE_TOO_CLOSE_M;
-  return frontIsNear || followedSideTooClose;
-}
-
 bool stuckDetectedWhileDriving(const SensorReadings& sensors) {
-  // Constant ToF readings are normal when the robot moves parallel through a
-  // straight corridor. Only run the constant-reading stuck detector when the
-  // geometry also suggests the robot is close enough to be pinned/scraping.
-  if (!geometrySuggestsContactOrPinning(sensors)) {
-    resetStuckDetector();
-    return false;
-  }
-
   if (!stuckReferenceUsable(sensors)) {
     resetStuckDetector();
     return false;
@@ -192,7 +178,16 @@ void beginDriveForward(DeferredOpeningTurn deferredOpeningTurn) {
   g_deferredOpeningTurn = deferredOpeningTurn;
   g_deferredOpeningTurnStartMs =
       deferredOpeningTurn == DeferredOpeningTurn::None ? 0 : millis();
+  g_postTurnAdvancePending = false;
   beginPhase(WallFollowPhase::DriveForward, 0);
+}
+
+void beginTurnWithOptionalPostAdvance(
+    WallFollowPhase turnPhase,
+    uint32_t durationMs,
+    bool postTurnAdvancePending) {
+  g_postTurnAdvancePending = postTurnAdvancePending;
+  beginPhase(turnPhase, durationMs);
 }
 
 void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
@@ -200,7 +195,8 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
   g_phaseStartMs = millis();
   g_phaseDurationMs = durationMs;
 
-  if (phase == WallFollowPhase::DriveForward) {
+  if (phase == WallFollowPhase::DriveForward ||
+      phase == WallFollowPhase::OpeningPostTurnAdvance) {
     resetStuckDetector();
     resetWallCorrectionMemory();
   } else {
@@ -224,6 +220,16 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
     case WallFollowPhase::BackUp:
       setMotorSpeeds(-WALL_FOLLOW_BACKUP_SPEED, -WALL_FOLLOW_BACKUP_SPEED);
       break;
+    case WallFollowPhase::RecoveryTurnAway:
+      if (WALL_FOLLOW_LEFT_HAND) {
+        setMotorSpeeds(WALL_FOLLOW_RECOVERY_TURN_SPEED, -WALL_FOLLOW_RECOVERY_TURN_SPEED);
+      } else {
+        setMotorSpeeds(-WALL_FOLLOW_RECOVERY_TURN_SPEED, WALL_FOLLOW_RECOVERY_TURN_SPEED);
+      }
+      break;
+    case WallFollowPhase::OpeningPostTurnAdvance:
+      setMotorSpeeds(WALL_FOLLOW_FORWARD_LEFT_SPEED, WALL_FOLLOW_FORWARD_RIGHT_SPEED);
+      break;
     case WallFollowPhase::Settle:
     case WallFollowPhase::Stopped:
     case WallFollowPhase::Decide:
@@ -243,9 +249,10 @@ bool phaseElapsed() {
 }
 
 void beginStuckRecovery(const SensorReadings& sensors) {
-  logState("stuck/collision suspected -> back up", sensors);
+  logState("steady sensor readings -> back up", sensors);
   resetStuckDetector();
   resetWallCorrectionMemory();
+  g_postTurnAdvancePending = false;
   beginPhase(WallFollowPhase::BackUp, WALL_FOLLOW_BACKUP_MS);
 }
 
@@ -383,14 +390,14 @@ void decideNextMove(const SensorReadings& sensors) {
         beginDriveForward(DeferredOpeningTurn::Left);
       } else {
         logState("left open -> turn left", sensors);
-        beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
+        beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, false);
       }
     } else if (frontOpen) {
       logState("front open -> continuous drive forward", sensors);
       beginDriveForward(DeferredOpeningTurn::None);
     } else if (rightOpen) {
       logState("right open -> turn right", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, false);
     } else {
       logState("dead end -> turn around", sensors);
       beginPhase(WallFollowPhase::TurnAround, WALL_FOLLOW_TURN_AROUND_MS);
@@ -402,14 +409,14 @@ void decideNextMove(const SensorReadings& sensors) {
         beginDriveForward(DeferredOpeningTurn::Right);
       } else {
         logState("right open -> turn right", sensors);
-        beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
+        beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, false);
       }
     } else if (frontOpen) {
       logState("front open -> continuous drive forward", sensors);
       beginDriveForward(DeferredOpeningTurn::None);
     } else if (leftOpen) {
       logState("left open -> turn left", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, false);
     } else {
       logState("dead end -> turn around", sensors);
       beginPhase(WallFollowPhase::TurnAround, WALL_FOLLOW_TURN_AROUND_MS);
@@ -423,13 +430,13 @@ void driveForwardContinuously(const SensorReadings& sensors) {
   if (g_deferredOpeningTurn == DeferredOpeningTurn::Left) {
     if (deferredOpeningAdvanceElapsed()) {
       logState("timed advance done -> delayed left turn", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, true);
       return;
     }
 
     if (frontIsBlocked(sensors)) {
       logState("front blocked during timed advance -> turn left now", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, true);
       return;
     }
 
@@ -445,13 +452,13 @@ void driveForwardContinuously(const SensorReadings& sensors) {
   if (g_deferredOpeningTurn == DeferredOpeningTurn::Right) {
     if (deferredOpeningAdvanceElapsed()) {
       logState("timed advance done -> delayed right turn", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, true);
       return;
     }
 
     if (frontIsBlocked(sensors)) {
       logState("front blocked during timed advance -> turn right now", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, true);
       return;
     }
 
@@ -471,7 +478,7 @@ void driveForwardContinuously(const SensorReadings& sensors) {
       g_deferredOpeningTurnStartMs = millis();
     } else {
       logState("left opening detected while driving -> turn left", sensors);
-      beginPhase(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, false);
       return;
     }
   }
@@ -483,7 +490,7 @@ void driveForwardContinuously(const SensorReadings& sensors) {
       g_deferredOpeningTurnStartMs = millis();
     } else {
       logState("right opening detected while driving -> turn right", sensors);
-      beginPhase(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS);
+      beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, false);
       return;
     }
   }
@@ -517,6 +524,7 @@ void initMazeSolver(MazeSolverState& state, MazeStrategy strategy) {
   g_lastCorrectionLogMs = 0;
   g_deferredOpeningTurn = DeferredOpeningTurn::None;
   g_deferredOpeningTurnStartMs = 0;
+  g_postTurnAdvancePending = false;
   resetStuckDetector();
   resetWallCorrectionMemory();
 
@@ -545,6 +553,17 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
 
     case WallFollowPhase::TurnLeft:
     case WallFollowPhase::TurnRight:
+      if (phaseElapsed()) {
+        if (g_postTurnAdvancePending) {
+          g_postTurnAdvancePending = false;
+          logState("turn done -> timed post-turn advance", sensors);
+          beginPhase(WallFollowPhase::OpeningPostTurnAdvance, WALL_FOLLOW_OPENING_ADVANCE_MS);
+        } else {
+          settleThen(WallFollowPhase::Decide);
+        }
+      }
+      break;
+
     case WallFollowPhase::TurnAround:
       if (phaseElapsed()) {
         settleThen(WallFollowPhase::Decide);
@@ -553,7 +572,29 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
 
     case WallFollowPhase::BackUp:
       if (phaseElapsed()) {
-        logState("backup done -> re-evaluate", sensors);
+        logState(
+            WALL_FOLLOW_LEFT_HAND ? "backup done -> clockwise recovery turn" :
+                                    "backup done -> counter-clockwise recovery turn",
+            sensors);
+        beginPhase(WallFollowPhase::RecoveryTurnAway, WALL_FOLLOW_RECOVERY_TURN_MS);
+      }
+      break;
+
+    case WallFollowPhase::RecoveryTurnAway:
+      if (phaseElapsed()) {
+        logState("recovery turn done -> re-evaluate", sensors);
+        settleThen(WallFollowPhase::Decide);
+      }
+      break;
+
+    case WallFollowPhase::OpeningPostTurnAdvance:
+      if (frontIsBlocked(sensors)) {
+        logState("post-turn advance front blocked -> re-evaluate", sensors);
+        settleThen(WallFollowPhase::Decide);
+      } else if (stuckDetectedWhileDriving(sensors)) {
+        beginStuckRecovery(sensors);
+      } else if (phaseElapsed()) {
+        logState("post-turn advance done -> re-evaluate", sensors);
         settleThen(WallFollowPhase::Decide);
       }
       break;

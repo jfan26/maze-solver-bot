@@ -117,9 +117,9 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.145f;
 constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
 
 // When the wall follower decides to take a side opening, keep driving forward
-// for a short fixed time before turning so the robot's center enters the branch
-// before the pivot starts. One "pulse" here is one control-loop update.
-constexpr uint16_t WALL_FOLLOW_OPENING_ADVANCE_TICKS = 24;
+// before the turn and again after the turn so the robot commits farther into the
+// branch. One "pulse" here is one control-loop update.
+constexpr uint16_t WALL_FOLLOW_OPENING_ADVANCE_TICKS = 48;
 constexpr uint32_t WALL_FOLLOW_OPENING_ADVANCE_MS =
     static_cast<uint32_t>(WALL_FOLLOW_OPENING_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
 
@@ -147,17 +147,16 @@ constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
 constexpr bool WALL_FOLLOW_LOG_CORRECTIONS = true;
 constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 
-// Stuck/collision recovery. A straight corridor can produce almost unchanged
-// ToF readings during perfectly normal motion, so constant readings alone must
-// not trigger recovery. Only trigger this recovery when the readings are steady
-// AND the robot is geometrically near a likely contact condition.
-constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.006f;
+// Recovery for steady three-sensor readings. If front/left/right stay nearly
+// unchanged for this long, treat it as stalled motion: back up, then turn away
+// from the followed wall before re-evaluating.
+constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.015f;
 constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
 constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
-constexpr float WALL_FOLLOW_STUCK_FRONT_NEAR_M = 0.22f;
-constexpr float WALL_FOLLOW_STUCK_SIDE_TOO_CLOSE_M = 0.11f;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
+constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 75;
 
 // Short pause after each turn or backup move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 60;
