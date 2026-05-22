@@ -31,7 +31,7 @@ pio device monitor -b 115200
 
 ## Hardware smoke test (motors + ToF)
 
-The current `src/main.cpp` has `RUN_HARDWARE_SMOKE_TEST = true` for bring-up.
+The current `src/main.cpp` has `RUN_HARDWARE_SMOKE_TEST_AT_BOOT = false` by default.
 
 ### 1) Connect board and identify serial port
 
@@ -83,7 +83,7 @@ Each phase is printed as `[MOTOR] ...` and then stopped before the next one.
 
 ### 6) Exit smoke-test mode
 
-Set `RUN_HARDWARE_SMOKE_TEST` to `false` in `src/main.cpp` to return to normal loop behavior.
+Set `RUN_HARDWARE_SMOKE_TEST_AT_BOOT` to `true` in `src/main.cpp` to re-enable the automatic smoke-test sequence.
 
 
 ## Manual motion control in smoke-test mode

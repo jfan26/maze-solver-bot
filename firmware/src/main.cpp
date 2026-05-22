@@ -1,15 +1,15 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <cstdarg>
 
 #include "config.h"
+#include "logging.h"
 #include "maze_solver.h"
 #include "motor_driver.h"
 #include "robot_state.h"
 #include "sensors.h"
 
-// Set to false to skip automatic smoke-test sequence at boot.
-constexpr bool RUN_HARDWARE_SMOKE_TEST_AT_BOOT = true;
+// Set to true to run the automatic smoke-test sequence at boot.
+constexpr bool RUN_HARDWARE_SMOKE_TEST_AT_BOOT = false;
 
 static RobotPose g_pose{};
 static SensorReadings g_sensorReadings{};
@@ -37,20 +37,10 @@ bool g_smokeSequenceDone = false;
 uint32_t g_lastSensorPrintMs = 0;
 uint32_t g_lastSequenceStartMs = 0;
 
-void logLine(const char* line) {
-  Serial.println(line);
+void mirrorLogLineToCommandClient(const char* line) {
   if (g_cmdClient && g_cmdClient.connected()) {
     g_cmdClient.println(line);
   }
-}
-
-void logf(const char* fmt, ...) {
-  char buffer[192];
-  va_list args;
-  va_start(args, fmt);
-  vsnprintf(buffer, sizeof(buffer), fmt, args);
-  va_end(args);
-  logLine(buffer);
 }
 
 void stopTimedMotorAction() {
@@ -167,10 +157,10 @@ void executeManualCommand(char command) {
       printManualControlHelp();
       break;
     case 'f':
-      startTimedMotorAction("forward calibrated", CAL_MOVE_SPEED, CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      startTimedMotorAction("forward calibrated", CAL_FORWARD_LEFT_SPEED, CAL_FORWARD_RIGHT_SPEED, CAL_FORWARD_MS);
       break;
     case 'b':
-      startTimedMotorAction("reverse calibrated", -CAL_MOVE_SPEED, -CAL_MOVE_SPEED, CAL_FORWARD_MS);
+      startTimedMotorAction("reverse calibrated", -CAL_FORWARD_LEFT_SPEED, -CAL_FORWARD_RIGHT_SPEED, CAL_FORWARD_MS);
       break;
     case 'l':
       startTimedMotorAction("turn left 30", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_LEFT_30_MS);
@@ -255,6 +245,7 @@ void serviceSmokeTestSequence() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+  setLogMirrorCallback(mirrorLogLineToCommandClient);
 
   Serial.println("[BOOT] init motors/sensors");
   initMotors();
