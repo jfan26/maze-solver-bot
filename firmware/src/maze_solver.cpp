@@ -21,7 +21,6 @@ enum class WallFollowPhase {
   TurnRight,
   TurnAround,
   BackUp,
-  RecoveryTurnAway,
   Settle,
   Stopped
 };
@@ -224,16 +223,6 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
       break;
     case WallFollowPhase::BackUp:
       setMotorSpeeds(-WALL_FOLLOW_BACKUP_SPEED, -WALL_FOLLOW_BACKUP_SPEED);
-      break;
-    case WallFollowPhase::RecoveryTurnAway:
-      if (WALL_FOLLOW_LEFT_HAND) {
-        // Left-hand following: assume we scraped/pinned the left wall, so turn
-        // slightly clockwise/right to point away from it.
-        setMotorSpeeds(WALL_FOLLOW_RECOVERY_TURN_SPEED, -WALL_FOLLOW_RECOVERY_TURN_SPEED);
-      } else {
-        // Right-hand following: turn slightly counter-clockwise/left.
-        setMotorSpeeds(-WALL_FOLLOW_RECOVERY_TURN_SPEED, WALL_FOLLOW_RECOVERY_TURN_SPEED);
-      }
       break;
     case WallFollowPhase::Settle:
     case WallFollowPhase::Stopped:
@@ -564,16 +553,7 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
 
     case WallFollowPhase::BackUp:
       if (phaseElapsed()) {
-        logState(
-            WALL_FOLLOW_LEFT_HAND ? "backup done -> small clockwise correction" :
-                                    "backup done -> small counter-clockwise correction",
-            sensors);
-        beginPhase(WallFollowPhase::RecoveryTurnAway, WALL_FOLLOW_RECOVERY_TURN_MS);
-      }
-      break;
-
-    case WallFollowPhase::RecoveryTurnAway:
-      if (phaseElapsed()) {
+        logState("backup done -> re-evaluate", sensors);
         settleThen(WallFollowPhase::Decide);
       }
       break;

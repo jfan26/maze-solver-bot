@@ -107,15 +107,14 @@ constexpr bool WALL_FOLLOW_LEFT_HAND = true;
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
 
 // Empirically tuned side-wall distances. These are measured from the sensor to
-// the wall, not from the robot body edge. The body is thicker than the earlier
-// geometry estimate, so use explicit thresholds instead of deriving them from
-// the old inset/clearance model.
-constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.125f;
+// the wall, not from the robot body edge. Shift them outward to account for the
+// sensor sitting about 10 cm inboard from the body side.
+constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.145f;
 
 // Treat the followed side as an opening only when it stretches well beyond the
 // normal tracking distance; this is the threshold that triggers left/right turn
 // decisions at side branches.
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.20f;
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
 
 // When the wall follower decides to take a side opening, keep driving forward
 // for a short fixed time before turning so the robot's center enters the branch
@@ -156,12 +155,10 @@ constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.006f;
 constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
 constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
 constexpr float WALL_FOLLOW_STUCK_FRONT_NEAR_M = 0.22f;
-constexpr float WALL_FOLLOW_STUCK_SIDE_TOO_CLOSE_M = 0.09f;
+constexpr float WALL_FOLLOW_STUCK_SIDE_TOO_CLOSE_M = 0.11f;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
-constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
-constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 75;
 
-// Short pause after each turn/recovery move to reduce overshoot before reading ToF again.
+// Short pause after each turn or backup move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 60;
 constexpr uint32_t WALL_FOLLOW_TURN_AROUND_MS = 2 * CAL_TURN_RIGHT_90_MS;
