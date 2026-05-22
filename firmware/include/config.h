@@ -48,10 +48,9 @@ constexpr int MOTOR_MAX_SPEED = 255;
 // Increase/decrease durations to tune distance and angle.
 constexpr int CAL_MOVE_SPEED = 140;
 
-// Straight-line forward calibration. Tune these independently if the robot
-// consistently curves when both motors are commanded to the same PWM value.
-constexpr int CAL_FORWARD_LEFT_SPEED = 140;
-constexpr int CAL_FORWARD_RIGHT_SPEED = 140;
+// Manual forward/reverse calibration intentionally uses the same PWM input on
+// both wheels so straight-line behavior can be observed directly.
+constexpr int CAL_FORWARD_SPEED = CAL_MOVE_SPEED;
 
 // Autonomous wall-following should usually be slower than manual straight-line
 // tests, otherwise the ToF feedback cannot steer before the robot scrapes a wall.
@@ -62,7 +61,7 @@ constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
-constexpr int WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT = 72;
+constexpr int WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT = 47;
 constexpr int WALL_FOLLOW_DRIVE_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_LEFT_SPEED * WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_DRIVE_RIGHT_SPEED =
@@ -74,13 +73,8 @@ constexpr uint32_t CAL_FORWARD_MS = 600;
 constexpr int CAL_TURN_SPEED = 140;
 
 // Separate left/right turn calibration
-constexpr uint32_t CAL_TURN_LEFT_90_MS = 540;
-constexpr uint32_t CAL_TURN_RIGHT_90_MS = 430;
-
-// Manual l/r commands now use 30-degree increments so fine steering does not
-// affect the solver's 90-degree turn calibration.
-constexpr uint32_t CAL_TURN_LEFT_30_MS = CAL_TURN_LEFT_90_MS / 3;
-constexpr uint32_t CAL_TURN_RIGHT_30_MS = CAL_TURN_RIGHT_90_MS / 3;
+constexpr uint32_t CAL_TURN_LEFT_90_MS = 497;
+constexpr uint32_t CAL_TURN_RIGHT_90_MS = 520;
 
 // 360 command in manual mode spins clockwise, so base it on right-turn timing
 constexpr uint32_t CAL_TURN_360_MS = 4 * CAL_TURN_RIGHT_90_MS;
@@ -111,7 +105,12 @@ constexpr unsigned long CONTROL_LOOP_PERIOD_MS = 20;
 
 // Wall-following behavior. Tune these after the manual motion calibration.
 // Set to false for right-hand wall following.
-constexpr bool WALL_FOLLOW_LEFT_HAND = true;
+constexpr bool WALL_FOLLOW_LEFT_HAND = false;
+
+// When false, skip per-loop PD steering corrections entirely and rely on the
+// 90-degree turn decisions at intersections to navigate. Gains and caps below
+// are preserved so steering can be re-enabled without re-tuning.
+constexpr bool WALL_FOLLOW_STEERING_ENABLED = false;
 
 // Distances are in meters because the sensor helper functions return meters.
 constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000.0f;
@@ -119,18 +118,23 @@ constexpr float WALL_FOLLOW_FRONT_BLOCKED_M = FRONT_OBSTACLE_THRESHOLD_MM / 1000
 // Empirically tuned side-wall distances. These are measured from the sensor to
 // the wall, not from the robot body edge. Shift them outward to account for the
 // sensor sitting about 10 cm inboard from the body side.
-constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.145f;
+constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.135f;
 
 // Treat the followed side as an opening only when it stretches well beyond the
 // normal tracking distance; this is the threshold that triggers left/right turn
 // decisions at side branches.
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.27f;
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.650f;
+
+// Side reading must indicate an opening for this many consecutive control-loop
+// ticks while in continuous-drive before a turn is triggered. Filters single
+// noisy spikes (e.g. an isolated 8.190m out-of-range read).
+constexpr uint8_t WALL_FOLLOW_OPENING_DEBOUNCE_TICKS = 3;
 
 // When the wall follower decides to take a side opening, keep driving forward
 // before the turn and again after the turn so the robot commits farther into the
 // branch. Use a longer post-turn advance to carry the whole robot deeper into
 // the new corridor. One "pulse" here is one control-loop update.
-constexpr uint16_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS = 29;
+constexpr uint16_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS = 20;
 constexpr uint32_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_MS =
     static_cast<uint32_t>(WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
 constexpr uint16_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_TICKS =
@@ -141,21 +145,25 @@ constexpr uint32_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_MS =
 // Cap how much the controller may steer toward the followed wall in a single
 // update. Positive correction always means "arc toward the followed wall" for
 // both left-hand and right-hand following. Set to 0 to disable those nudges.
-constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 18;
+constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 8;
 
 // Leave a small neutral band around the target distance so the robot does not
 // keep flipping between "steer toward wall" and "steer away from wall" around
 // the setpoint. Use a larger far-side threshold so it keeps going straight until
 // the followed wall is clearly farther away.
-constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.005f;
-constexpr float WALL_FOLLOW_TOWARD_WALL_LEEWAY_M = 0.035f;
+constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.003f;
+constexpr float WALL_FOLLOW_TOWARD_WALL_LEEWAY_M = 0.010f;
+
+// In left-hand mode, soften the "too close to left wall" correction so the
+// robot does not veer right as aggressively while still backing away.
+constexpr int WALL_FOLLOW_LEFT_CLOSE_RIGHT_VEER_SCALE_PERCENT = 100;
 
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
 // old gains produced only tiny PWM differences at realistic distance errors.
-constexpr float WALL_FOLLOW_KP = 900.0f;
-constexpr float WALL_FOLLOW_KD = 1600.0f;
-constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 25;
+constexpr float WALL_FOLLOW_KP = 450.0f;
+constexpr float WALL_FOLLOW_KD = 800.0f;
+constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 18;
 constexpr int WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED = 85;
 constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
 
@@ -169,6 +177,10 @@ constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 // from the followed wall before re-evaluating. Repeated recoveries inside the
 // streak window escalate both backup distance and recovery turn size.
 constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.015f;
+// Stuck detection ignores per-sensor comparisons when BOTH the current and
+// reference readings on that sensor exceed this range, because the VL53L0X
+// noise floor scales with distance and exceeds STUCK_DELTA past ~0.5 m.
+constexpr float WALL_FOLLOW_STUCK_MAX_TRACKING_M = 0.5f;
 constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;

@@ -47,6 +47,9 @@ uint8_t g_recoverySequenceCount = 0;
 uint32_t g_lastRecoveryStartMs = 0;
 uint32_t g_activeRecoveryBackupMs = WALL_FOLLOW_BACKUP_MS;
 uint32_t g_activeRecoveryTurnMs = WALL_FOLLOW_RECOVERY_TURN_MS;
+bool g_recoveryTurnLeft = WALL_FOLLOW_LEFT_HAND;
+uint8_t g_leftOpenStreakTicks = 0;
+uint8_t g_rightOpenStreakTicks = 0;
 
 SensorReadings g_stuckReference{};
 uint32_t g_stuckWindowStartMs = 0;
@@ -143,15 +146,31 @@ bool distanceUsableForStuckDetection(float distanceM) {
 }
 
 bool stuckReferenceUsable(const SensorReadings& sensors) {
-  return distanceUsableForStuckDetection(sensors.frontDistanceM) &&
-         distanceUsableForStuckDetection(sensors.leftDistanceM) &&
+  // One usable sensor is enough to detect lack-of-motion. Requiring all three
+  // lets a single bad reading (e.g. front sensor saturating against a close
+  // wall) silently disable the whole recovery path.
+  return distanceUsableForStuckDetection(sensors.frontDistanceM) ||
+         distanceUsableForStuckDetection(sensors.leftDistanceM) ||
          distanceUsableForStuckDetection(sensors.rightDistanceM);
 }
 
+bool sensorReadingDeltaWithinTolerance(float current, float reference) {
+  if (!isFiniteUsableDistance(current) || !isFiniteUsableDistance(reference)) {
+    return true;
+  }
+  // Long-range readings have noise larger than STUCK_DELTA and would otherwise
+  // reset the stuck timer continuously even when the robot is pinned.
+  if (current > WALL_FOLLOW_STUCK_MAX_TRACKING_M &&
+      reference > WALL_FOLLOW_STUCK_MAX_TRACKING_M) {
+    return true;
+  }
+  return fabsf(current - reference) <= WALL_FOLLOW_STUCK_DELTA_M;
+}
+
 bool readingsStayedConstant(const SensorReadings& sensors, const SensorReadings& reference) {
-  return fabsf(sensors.frontDistanceM - reference.frontDistanceM) <= WALL_FOLLOW_STUCK_DELTA_M &&
-         fabsf(sensors.leftDistanceM - reference.leftDistanceM) <= WALL_FOLLOW_STUCK_DELTA_M &&
-         fabsf(sensors.rightDistanceM - reference.rightDistanceM) <= WALL_FOLLOW_STUCK_DELTA_M;
+  return sensorReadingDeltaWithinTolerance(sensors.frontDistanceM, reference.frontDistanceM) &&
+         sensorReadingDeltaWithinTolerance(sensors.leftDistanceM, reference.leftDistanceM) &&
+         sensorReadingDeltaWithinTolerance(sensors.rightDistanceM, reference.rightDistanceM);
 }
 
 bool stuckDetectedWhileDriving(const SensorReadings& sensors) {
@@ -218,6 +237,8 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
       phase == WallFollowPhase::OpeningPostTurnAdvance) {
     resetStuckDetector();
     resetWallCorrectionMemory();
+    g_leftOpenStreakTicks = 0;
+    g_rightOpenStreakTicks = 0;
   } else {
     g_deferredOpeningTurn = DeferredOpeningTurn::None;
     g_deferredOpeningTurnStartMs = 0;
@@ -240,10 +261,10 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
       setMotorSpeeds(-WALL_FOLLOW_BACKUP_SPEED, -WALL_FOLLOW_BACKUP_SPEED);
       break;
     case WallFollowPhase::RecoveryTurnAway:
-      if (WALL_FOLLOW_LEFT_HAND) {
-        setMotorSpeeds(WALL_FOLLOW_RECOVERY_TURN_SPEED, -WALL_FOLLOW_RECOVERY_TURN_SPEED);
-      } else {
+      if (g_recoveryTurnLeft) {
         setMotorSpeeds(-WALL_FOLLOW_RECOVERY_TURN_SPEED, WALL_FOLLOW_RECOVERY_TURN_SPEED);
+      } else {
+        setMotorSpeeds(WALL_FOLLOW_RECOVERY_TURN_SPEED, -WALL_FOLLOW_RECOVERY_TURN_SPEED);
       }
       break;
     case WallFollowPhase::OpeningPostTurnAdvance:
@@ -269,6 +290,18 @@ bool phaseElapsed() {
 
 uint32_t clampRecoveryDuration(uint32_t durationMs, uint32_t maxDurationMs) {
   return durationMs > maxDurationMs ? maxDurationMs : durationMs;
+}
+
+bool chooseRecoveryTurnDirection(const SensorReadings& sensors) {
+  // Turn away from whichever side wall is closer; that's the side the robot is
+  // pinned against. Falls back to the followed-wall direction if both side
+  // readings can't be compared.
+  const bool leftUsable = isFiniteUsableDistance(sensors.leftDistanceM);
+  const bool rightUsable = isFiniteUsableDistance(sensors.rightDistanceM);
+  if (leftUsable && rightUsable) {
+    return sensors.rightDistanceM < sensors.leftDistanceM;
+  }
+  return WALL_FOLLOW_LEFT_HAND;
 }
 
 void beginStuckRecovery(const SensorReadings& sensors) {
@@ -353,11 +386,38 @@ int applyTowardWallCorrectionLimit(int correction, float distanceErrorM) {
   return correction;
 }
 
+int scaleLeftHandCloseWallRightVeerCorrection(int correction, float distanceErrorM) {
+  if (!WALL_FOLLOW_LEFT_HAND || distanceErrorM >= 0.0f || correction >= 0) {
+    return correction;
+  }
+
+  return (correction * WALL_FOLLOW_LEFT_CLOSE_RIGHT_VEER_SCALE_PERCENT) / 100;
+}
+
 int keepForwardCommandAboveStaticFriction(int command) {
   if (command > 0 && command < WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED) {
     return WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED;
   }
   return command;
+}
+
+void applyForwardFloorPreservingDifferential(int& leftCommand, int& rightCommand) {
+  // Floor-clamping one wheel without compensating the other silently cancels
+  // the requested steering differential; boost the partner to preserve it.
+  if (leftCommand <= 0 || rightCommand <= 0) {
+    leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
+    rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
+    return;
+  }
+  const int floor = WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED;
+  if (leftCommand < floor) {
+    rightCommand += floor - leftCommand;
+    leftCommand = floor;
+  }
+  if (rightCommand < floor) {
+    leftCommand += floor - rightCommand;
+    rightCommand = floor;
+  }
 }
 
 void maybeLogWallCorrection(
@@ -396,16 +456,24 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
   int leftCommand = baseLeftSpeed;
   int rightCommand = baseRightSpeed;
 
+  if (!WALL_FOLLOW_STEERING_ENABLED) {
+    resetWallCorrectionMemory();
+    applyForwardFloorPreservingDifferential(leftCommand, rightCommand);
+    setMotorSpeeds(leftCommand, rightCommand);
+    return;
+  }
+
   if (WALL_FOLLOW_LEFT_HAND && sideReadingTracksNearbyWall(sensors.leftDistanceM)) {
     // Positive correction arcs left; negative correction arcs right.
     // If the left reading is increasing, the robot is drifting away from the
     // left wall, so arc left. If it is decreasing, arc right.
     const WallCorrectionResult result = computeWallCorrection(sensors.leftDistanceM);
-    const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
+    const int correction = scaleLeftHandCloseWallRightVeerCorrection(
+        applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM),
+        result.distanceErrorM);
     leftCommand = baseLeftSpeed - correction;
     rightCommand = baseRightSpeed + correction;
-    leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
-    rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
+    applyForwardFloorPreservingDifferential(leftCommand, rightCommand);
     maybeLogWallCorrection("left", sensors.leftDistanceM, result, correction, leftCommand, rightCommand);
   } else if (!WALL_FOLLOW_LEFT_HAND && sideReadingTracksNearbyWall(sensors.rightDistanceM)) {
     // Positive correction arcs right; negative correction arcs left.
@@ -413,15 +481,13 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
     const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
     leftCommand = baseLeftSpeed + correction;
     rightCommand = baseRightSpeed - correction;
-    leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
-    rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
+    applyForwardFloorPreservingDifferential(leftCommand, rightCommand);
     maybeLogWallCorrection("right", sensors.rightDistanceM, result, correction, leftCommand, rightCommand);
   } else {
     resetWallCorrectionMemory();
+    applyForwardFloorPreservingDifferential(leftCommand, rightCommand);
   }
 
-  leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
-  rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
   setMotorSpeeds(leftCommand, rightCommand);
 }
 
@@ -471,9 +537,32 @@ void decideNextMove(const SensorReadings& sensors) {
   }
 }
 
+void updateOpeningStreakTicks(const SensorReadings& sensors) {
+  if (leftIsOpen(sensors)) {
+    if (g_leftOpenStreakTicks < 255) ++g_leftOpenStreakTicks;
+  } else {
+    g_leftOpenStreakTicks = 0;
+  }
+  if (rightIsOpen(sensors)) {
+    if (g_rightOpenStreakTicks < 255) ++g_rightOpenStreakTicks;
+  } else {
+    g_rightOpenStreakTicks = 0;
+  }
+}
+
+bool leftOpeningStreakConfirmed() {
+  return g_leftOpenStreakTicks >= WALL_FOLLOW_OPENING_DEBOUNCE_TICKS;
+}
+
+bool rightOpeningStreakConfirmed() {
+  return g_rightOpenStreakTicks >= WALL_FOLLOW_OPENING_DEBOUNCE_TICKS;
+}
+
 void driveForwardContinuously(const SensorReadings& sensors) {
   // Preserve the wall-following priority while driving continuously. This lets
   // the robot react as soon as it sees a side opening or front obstruction.
+  updateOpeningStreakTicks(sensors);
+
   if (g_deferredOpeningTurn == DeferredOpeningTurn::Left) {
     if (deferredOpeningAdvanceElapsed()) {
       logState("timed advance done -> delayed left turn", sensors);
@@ -518,25 +607,25 @@ void driveForwardContinuously(const SensorReadings& sensors) {
     return;
   }
 
-  if (WALL_FOLLOW_LEFT_HAND && leftIsOpen(sensors)) {
+  if (WALL_FOLLOW_LEFT_HAND && leftOpeningStreakConfirmed()) {
     if (frontIsOpen(sensors)) {
-      logState("left opening detected while driving -> timed advance before turn left", sensors);
+      logState("left opening confirmed while driving -> timed advance before turn left", sensors);
       g_deferredOpeningTurn = DeferredOpeningTurn::Left;
       g_deferredOpeningTurnStartMs = millis();
     } else {
-      logState("left opening detected while driving -> turn left", sensors);
+      logState("left opening confirmed while driving -> turn left", sensors);
       beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnLeft, CAL_TURN_LEFT_90_MS, false);
       return;
     }
   }
 
-  if (!WALL_FOLLOW_LEFT_HAND && rightIsOpen(sensors)) {
+  if (!WALL_FOLLOW_LEFT_HAND && rightOpeningStreakConfirmed()) {
     if (frontIsOpen(sensors)) {
-      logState("right opening detected while driving -> timed advance before turn right", sensors);
+      logState("right opening confirmed while driving -> timed advance before turn right", sensors);
       g_deferredOpeningTurn = DeferredOpeningTurn::Right;
       g_deferredOpeningTurnStartMs = millis();
     } else {
-      logState("right opening detected while driving -> turn right", sensors);
+      logState("right opening confirmed while driving -> turn right", sensors);
       beginTurnWithOptionalPostAdvance(WallFollowPhase::TurnRight, CAL_TURN_RIGHT_90_MS, false);
       return;
     }
@@ -576,6 +665,9 @@ void initMazeSolver(MazeSolverState& state, MazeStrategy strategy) {
   g_lastRecoveryStartMs = 0;
   g_activeRecoveryBackupMs = WALL_FOLLOW_BACKUP_MS;
   g_activeRecoveryTurnMs = WALL_FOLLOW_RECOVERY_TURN_MS;
+  g_recoveryTurnLeft = WALL_FOLLOW_LEFT_HAND;
+  g_leftOpenStreakTicks = 0;
+  g_rightOpenStreakTicks = 0;
   resetStuckDetector();
   resetWallCorrectionMemory();
 
@@ -623,9 +715,10 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
 
     case WallFollowPhase::BackUp:
       if (phaseElapsed()) {
+        g_recoveryTurnLeft = chooseRecoveryTurnDirection(sensors);
         logState(
-            WALL_FOLLOW_LEFT_HAND ? "backup done -> clockwise recovery turn" :
-                                    "backup done -> counter-clockwise recovery turn",
+            g_recoveryTurnLeft ? "backup done -> counter-clockwise recovery turn" :
+                                 "backup done -> clockwise recovery turn",
             sensors);
         beginPhase(WallFollowPhase::RecoveryTurnAway, g_activeRecoveryTurnMs);
       }

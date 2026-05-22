@@ -85,14 +85,13 @@ Each phase is printed as `[MOTOR] ...` and then stopped before the next one.
 
 Set `RUN_HARDWARE_SMOKE_TEST_AT_BOOT` to `true` in `src/main.cpp` to re-enable the automatic smoke-test sequence.
 
-
 ## Manual motion control in smoke-test mode
 
 After the automatic phase sequence finishes, you can send single-character commands from the serial monitor to run calibrated motions:
 
-- `l`: turn left 30 deg
-- `r`: turn right 30 deg
-- `t`: turn 360° clockwise
+- `l`: turn left 90 deg
+- `r`: turn right 90 deg
+- `t`: turn 360 deg clockwise
 - `f`: move forward calibrated distance
 - `b`: move backward calibrated distance
 - `p`: toggle ToF printout
@@ -127,18 +126,17 @@ If your school network blocks device onboarding, use `WifiMode::AccessPoint` so 
 Tune these constants in `include/config.h`:
 
 - `CAL_MOVE_SPEED`: PWM command for straight moves
+- `CAL_FORWARD_SPEED`: shared PWM command used for both wheels during `f` and `b`
 - `CAL_FORWARD_MS`: duration used for `f` and `b`
 - `CAL_TURN_SPEED`: PWM command for turns
-- `CAL_TURN_LEFT_30_MS`: duration used for manual left 30 deg turns (`l`)
-- `CAL_TURN_RIGHT_30_MS`: duration used for manual right 30 deg turns (`r`)
-- `CAL_TURN_LEFT_90_MS`: duration used for autonomous left 90 deg turns
-- `CAL_TURN_RIGHT_90_MS`: duration used for autonomous right 90 deg turns
-- `CAL_TURN_360_MS`: duration used for 360° turn (`t`), default is `4 * CAL_TURN_RIGHT_90_MS`
+- `CAL_TURN_LEFT_90_MS`: duration used for manual and autonomous left 90 deg turns (`l`)
+- `CAL_TURN_RIGHT_90_MS`: duration used for manual and autonomous right 90 deg turns (`r`)
+- `CAL_TURN_360_MS`: duration used for 360 deg turn (`t`), default is `4 * CAL_TURN_RIGHT_90_MS`
 
 Recommended workflow:
 
 1. Start with low speed and short duration.
-2. Run `l`/`r`, measure actual angle, and adjust `CAL_TURN_LEFT_30_MS` / `CAL_TURN_RIGHT_30_MS`.
+2. Run `l`/`r`, measure actual angle, and adjust `CAL_TURN_LEFT_90_MS` / `CAL_TURN_RIGHT_90_MS`.
 3. Run `f`, measure distance, and adjust `CAL_FORWARD_MS`.
 4. Re-upload and repeat until repeatable.
 
