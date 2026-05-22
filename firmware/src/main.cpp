@@ -142,8 +142,8 @@ void printManualControlHelp() {
   logLine("[CTRL]   h            -> help");
   logLine("[CTRL]   f            -> forward calibrated distance");
   logLine("[CTRL]   b            -> reverse calibrated distance");
-  logLine("[CTRL]   l            -> turn left 90 deg");
-  logLine("[CTRL]   r            -> turn right 90 deg");
+  logLine("[CTRL]   l            -> turn left 30 deg");
+  logLine("[CTRL]   r            -> turn right 30 deg");
   logLine("[CTRL]   t            -> turn 360 deg (CW)");
   logLine("[CTRL]   p            -> toggle ToF printout");
   logLine("[CTRL]   m            -> start maze solver mode");
@@ -163,10 +163,10 @@ void executeManualCommand(char command) {
       startTimedMotorAction("reverse calibrated", -CAL_FORWARD_LEFT_SPEED, -CAL_FORWARD_RIGHT_SPEED, CAL_FORWARD_MS);
       break;
     case 'l':
-      startTimedMotorAction("turn left 90", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_LEFT_90_MS);
+      startTimedMotorAction("turn left 30", -CAL_TURN_SPEED, CAL_TURN_SPEED, CAL_TURN_LEFT_30_MS);
       break;
     case 'r':
-      startTimedMotorAction("turn right 90", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_RIGHT_90_MS);
+      startTimedMotorAction("turn right 30", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_RIGHT_30_MS);
       break;
     case 't':
       startTimedMotorAction("turn 360", CAL_TURN_SPEED, -CAL_TURN_SPEED, CAL_TURN_360_MS);

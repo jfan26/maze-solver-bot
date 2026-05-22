@@ -90,8 +90,8 @@ Set `RUN_HARDWARE_SMOKE_TEST_AT_BOOT` to `true` in `src/main.cpp` to re-enable t
 
 After the automatic phase sequence finishes, you can send single-character commands from the serial monitor to run calibrated motions:
 
-- `l`: turn left 90°
-- `r`: turn right 90°
+- `l`: turn left 30 deg
+- `r`: turn right 30 deg
 - `t`: turn 360° clockwise
 - `f`: move forward calibrated distance
 - `b`: move backward calibrated distance
@@ -129,13 +129,16 @@ Tune these constants in `include/config.h`:
 - `CAL_MOVE_SPEED`: PWM command for straight moves
 - `CAL_FORWARD_MS`: duration used for `f` and `b`
 - `CAL_TURN_SPEED`: PWM command for turns
-- `CAL_TURN_90_MS`: duration used for 90° turns (`l`/`r`)
-- `CAL_TURN_360_MS`: duration used for 360° turn (`t`), default is `4 * CAL_TURN_90_MS`
+- `CAL_TURN_LEFT_30_MS`: duration used for manual left 30 deg turns (`l`)
+- `CAL_TURN_RIGHT_30_MS`: duration used for manual right 30 deg turns (`r`)
+- `CAL_TURN_LEFT_90_MS`: duration used for autonomous left 90 deg turns
+- `CAL_TURN_RIGHT_90_MS`: duration used for autonomous right 90 deg turns
+- `CAL_TURN_360_MS`: duration used for 360° turn (`t`), default is `4 * CAL_TURN_RIGHT_90_MS`
 
 Recommended workflow:
 
 1. Start with low speed and short duration.
-2. Run `l`/`r`, measure actual angle, and adjust `CAL_TURN_90_MS`.
+2. Run `l`/`r`, measure actual angle, and adjust `CAL_TURN_LEFT_30_MS` / `CAL_TURN_RIGHT_30_MS`.
 3. Run `f`, measure distance, and adjust `CAL_FORWARD_MS`.
 4. Re-upload and repeat until repeatable.
 
