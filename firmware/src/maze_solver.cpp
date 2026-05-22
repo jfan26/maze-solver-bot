@@ -43,6 +43,10 @@ uint32_t g_lastCorrectionLogMs = 0;
 DeferredOpeningTurn g_deferredOpeningTurn = DeferredOpeningTurn::None;
 uint32_t g_deferredOpeningTurnStartMs = 0;
 bool g_postTurnAdvancePending = false;
+uint8_t g_recoverySequenceCount = 0;
+uint32_t g_lastRecoveryStartMs = 0;
+uint32_t g_activeRecoveryBackupMs = WALL_FOLLOW_BACKUP_MS;
+uint32_t g_activeRecoveryTurnMs = WALL_FOLLOW_RECOVERY_TURN_MS;
 
 SensorReadings g_stuckReference{};
 uint32_t g_stuckWindowStartMs = 0;
@@ -263,12 +267,38 @@ bool phaseElapsed() {
   return millis() - g_phaseStartMs >= g_phaseDurationMs;
 }
 
+uint32_t clampRecoveryDuration(uint32_t durationMs, uint32_t maxDurationMs) {
+  return durationMs > maxDurationMs ? maxDurationMs : durationMs;
+}
+
 void beginStuckRecovery(const SensorReadings& sensors) {
+  const uint32_t now = millis();
+  if (g_recoverySequenceCount > 0 &&
+      now - g_lastRecoveryStartMs <= WALL_FOLLOW_RECOVERY_STREAK_WINDOW_MS) {
+    ++g_recoverySequenceCount;
+  } else {
+    g_recoverySequenceCount = 1;
+  }
+  g_lastRecoveryStartMs = now;
+
+  const uint32_t escalationLevel = g_recoverySequenceCount - 1;
+  g_activeRecoveryBackupMs = clampRecoveryDuration(
+      WALL_FOLLOW_BACKUP_MS + escalationLevel * WALL_FOLLOW_RECOVERY_BACKUP_STEP_MS,
+      WALL_FOLLOW_RECOVERY_BACKUP_MAX_MS);
+  g_activeRecoveryTurnMs = clampRecoveryDuration(
+      WALL_FOLLOW_RECOVERY_TURN_MS + escalationLevel * WALL_FOLLOW_RECOVERY_TURN_STEP_MS,
+      WALL_FOLLOW_RECOVERY_TURN_MAX_MS);
+
   logState("steady sensor readings -> back up", sensors);
+  logf(
+      "[WALL] recovery streak=%u backup=%lums turn=%lums",
+      static_cast<unsigned>(g_recoverySequenceCount),
+      static_cast<unsigned long>(g_activeRecoveryBackupMs),
+      static_cast<unsigned long>(g_activeRecoveryTurnMs));
   resetStuckDetector();
   resetWallCorrectionMemory();
   g_postTurnAdvancePending = false;
-  beginPhase(WallFollowPhase::BackUp, WALL_FOLLOW_BACKUP_MS);
+  beginPhase(WallFollowPhase::BackUp, g_activeRecoveryBackupMs);
 }
 
 bool deferredOpeningAdvanceElapsed() {
@@ -542,6 +572,10 @@ void initMazeSolver(MazeSolverState& state, MazeStrategy strategy) {
   g_deferredOpeningTurn = DeferredOpeningTurn::None;
   g_deferredOpeningTurnStartMs = 0;
   g_postTurnAdvancePending = false;
+  g_recoverySequenceCount = 0;
+  g_lastRecoveryStartMs = 0;
+  g_activeRecoveryBackupMs = WALL_FOLLOW_BACKUP_MS;
+  g_activeRecoveryTurnMs = WALL_FOLLOW_RECOVERY_TURN_MS;
   resetStuckDetector();
   resetWallCorrectionMemory();
 
@@ -593,7 +627,7 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
             WALL_FOLLOW_LEFT_HAND ? "backup done -> clockwise recovery turn" :
                                     "backup done -> counter-clockwise recovery turn",
             sensors);
-        beginPhase(WallFollowPhase::RecoveryTurnAway, WALL_FOLLOW_RECOVERY_TURN_MS);
+        beginPhase(WallFollowPhase::RecoveryTurnAway, g_activeRecoveryTurnMs);
       }
       break;
 

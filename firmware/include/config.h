@@ -62,7 +62,7 @@ constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
-constexpr int WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT = 81;
+constexpr int WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT = 72;
 constexpr int WALL_FOLLOW_DRIVE_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_LEFT_SPEED * WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_DRIVE_RIGHT_SPEED =
@@ -125,7 +125,7 @@ constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.27f;
 // before the turn and again after the turn so the robot commits farther into the
 // branch. Use a longer post-turn advance to carry the whole robot deeper into
 // the new corridor. One "pulse" here is one control-loop update.
-constexpr uint16_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS = 36;
+constexpr uint16_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS = 29;
 constexpr uint32_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_MS =
     static_cast<uint32_t>(WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
 constexpr uint16_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_TICKS =
@@ -161,13 +161,19 @@ constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 
 // Recovery for steady three-sensor readings. If front/left/right stay nearly
 // unchanged for this long, treat it as stalled motion: back up, then turn away
-// from the followed wall before re-evaluating.
+// from the followed wall before re-evaluating. Repeated recoveries inside the
+// streak window escalate both backup distance and recovery turn size.
 constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.015f;
 constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
 constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
 constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 50;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_STREAK_WINDOW_MS = 5000;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_BACKUP_STEP_MS = 20;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_STEP_MS = 8;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_BACKUP_MAX_MS = 300;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MAX_MS = 125;
 
 // Short pause after each turn or backup move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 60;
