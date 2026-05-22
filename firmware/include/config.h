@@ -75,7 +75,7 @@ constexpr int CAL_TURN_SPEED = 140;
 
 // Separate left/right turn calibration
 constexpr uint32_t CAL_TURN_LEFT_90_MS = 540;
-constexpr uint32_t CAL_TURN_RIGHT_90_MS = 430;
+constexpr uint32_t CAL_TURN_RIGHT_90_MS = 344;
 
 // Manual l/r commands now use 30-degree increments so fine steering does not
 // affect the solver's 90-degree turn calibration.
@@ -143,17 +143,20 @@ constexpr uint32_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_MS =
 // both left-hand and right-hand following. Set to 0 to disable those nudges.
 constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 18;
 
-// Leave a small neutral band around the target distance so the robot does not
-// keep flipping between "steer toward wall" and "steer away from wall" around
-// the setpoint. Use a larger far-side threshold so it keeps going straight until
-// the followed wall is clearly farther away.
-constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.005f;
+// Leave an asymmetric neutral band around the target distance so the robot does
+// not keep flipping between "steer toward wall" and "steer away from wall"
+// around the setpoint. Let it run a bit closer to the followed wall before
+// steering away, while still using a larger far-side threshold so it keeps
+// going straight until the wall is clearly farther away.
+constexpr float WALL_FOLLOW_TOO_CLOSE_LEEWAY_M = 0.015f;
 constexpr float WALL_FOLLOW_TOWARD_WALL_LEEWAY_M = 0.035f;
+constexpr float WALL_FOLLOW_AWAY_FROM_WALL_CORRECTION_SCALE = 0.5f;
 
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
 // old gains produced only tiny PWM differences at realistic distance errors.
 constexpr float WALL_FOLLOW_KP = 900.0f;
+constexpr bool WALL_FOLLOW_USE_D_TERM = false;
 constexpr float WALL_FOLLOW_KD = 1600.0f;
 constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 25;
 constexpr int WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED = 85;

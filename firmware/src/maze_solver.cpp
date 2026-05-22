@@ -308,7 +308,7 @@ bool deferredOpeningAdvanceElapsed() {
 
 float computeLeewayAdjustedDistanceError(float followDistanceM) {
   const float towardWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M + WALL_FOLLOW_TOWARD_WALL_LEEWAY_M;
-  const float awayFromWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M - WALL_FOLLOW_TARGET_LEEWAY_M;
+  const float awayFromWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M - WALL_FOLLOW_TOO_CLOSE_LEEWAY_M;
 
   if (followDistanceM > towardWallThresholdM) {
     return followDistanceM - towardWallThresholdM;
@@ -334,10 +334,13 @@ WallCorrectionResult computeWallCorrection(float followDistanceM) {
   g_previousFollowDistanceM = followDistanceM;
   g_previousFollowDistanceValid = true;
 
+  const float derivativeCorrection =
+      WALL_FOLLOW_USE_D_TERM ? WALL_FOLLOW_KD * distanceDeltaM : 0.0f;
+
   return WallCorrectionResult{
       distanceErrorM,
       distanceDeltaM,
-      clampCorrection(WALL_FOLLOW_KP * distanceErrorM + WALL_FOLLOW_KD * distanceDeltaM)};
+      clampCorrection(WALL_FOLLOW_KP * distanceErrorM + derivativeCorrection)};
 }
 
 int applyTowardWallCorrectionLimit(int correction, float distanceErrorM) {
@@ -351,6 +354,15 @@ int applyTowardWallCorrectionLimit(int correction, float distanceErrorM) {
     return WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION;
   }
   return correction;
+}
+
+int scaleAwayFromWallCorrection(int correction) {
+  if (correction >= 0) {
+    return correction;
+  }
+
+  return static_cast<int>(roundf(
+      static_cast<float>(correction) * WALL_FOLLOW_AWAY_FROM_WALL_CORRECTION_SCALE));
 }
 
 int keepForwardCommandAboveStaticFriction(int command) {
@@ -401,7 +413,8 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
     // If the left reading is increasing, the robot is drifting away from the
     // left wall, so arc left. If it is decreasing, arc right.
     const WallCorrectionResult result = computeWallCorrection(sensors.leftDistanceM);
-    const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
+    const int correction = scaleAwayFromWallCorrection(
+        applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM));
     leftCommand = baseLeftSpeed - correction;
     rightCommand = baseRightSpeed + correction;
     leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
@@ -410,7 +423,8 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
   } else if (!WALL_FOLLOW_LEFT_HAND && sideReadingTracksNearbyWall(sensors.rightDistanceM)) {
     // Positive correction arcs right; negative correction arcs left.
     const WallCorrectionResult result = computeWallCorrection(sensors.rightDistanceM);
-    const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
+    const int correction = scaleAwayFromWallCorrection(
+        applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM));
     leftCommand = baseLeftSpeed + correction;
     rightCommand = baseRightSpeed - correction;
     leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
