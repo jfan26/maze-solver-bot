@@ -57,7 +57,7 @@ constexpr int CAL_FORWARD_RIGHT_SPEED = 140;
 // tests, otherwise the ToF feedback cannot steer before the robot scrapes a wall.
 constexpr int WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED = 105;
 constexpr int WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED = 105;
-constexpr int WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT = 65;
+constexpr int WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT = 100;
 constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED =
@@ -115,7 +115,7 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.125f;
 // Treat the followed side as an opening only when it stretches well beyond the
 // normal tracking distance; this is the threshold that triggers left/right turn
 // decisions at side branches.
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.175f;
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.20f;
 
 // When the wall follower decides to take a side opening, keep driving forward
 // for a short fixed time before turning so the robot's center enters the branch
@@ -127,7 +127,7 @@ constexpr uint32_t WALL_FOLLOW_OPENING_ADVANCE_MS =
 // Cap how much the controller may steer toward the followed wall in a single
 // update. Positive correction always means "arc toward the followed wall" for
 // both left-hand and right-hand following. Set to 0 to disable those nudges.
-constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 12;
+constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 18;
 
 // Leave a small neutral band around the target distance so the robot does not
 // keep flipping between "steer toward wall" and "steer away from wall" around
@@ -139,7 +139,8 @@ constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.005f;
 // old gains produced only tiny PWM differences at realistic distance errors.
 constexpr float WALL_FOLLOW_KP = 900.0f;
 constexpr float WALL_FOLLOW_KD = 1600.0f;
-constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 65;
+constexpr int WALL_FOLLOW_CORRECTION_LIMIT = 25;
+constexpr int WALL_FOLLOW_MIN_ACTIVE_FORWARD_SPEED = 85;
 constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
 
 // Emit steering telemetry while driving forward so wall-follow tuning can be
@@ -147,12 +148,15 @@ constexpr float WALL_FOLLOW_DISTANCE_DEADBAND_M = 0.003f;
 constexpr bool WALL_FOLLOW_LOG_CORRECTIONS = true;
 constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 
-// Stuck/collision recovery. If all three ToF readings stay almost unchanged
-// while the robot is trying to drive forward, assume the robot is pinned against
-// something: back up briefly, then turn slightly away from the followed wall.
+// Stuck/collision recovery. A straight corridor can produce almost unchanged
+// ToF readings during perfectly normal motion, so constant readings alone must
+// not trigger recovery. Only trigger this recovery when the readings are steady
+// AND the robot is geometrically near a likely contact condition.
 constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.006f;
 constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
-constexpr uint32_t WALL_FOLLOW_STUCK_MS = 180;
+constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
+constexpr float WALL_FOLLOW_STUCK_FRONT_NEAR_M = 0.22f;
+constexpr float WALL_FOLLOW_STUCK_SIDE_TOO_CLOSE_M = 0.09f;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
 constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
