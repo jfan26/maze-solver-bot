@@ -135,7 +135,7 @@ void resetWallCorrectionMemory() {
 }
 
 bool distanceUsableForStuckDetection(float distanceM) {
-  return isFiniteUsableDistance(distanceM) && distanceM < WALL_FOLLOW_STUCK_MAX_SENSOR_M;
+  return isFiniteUsableDistance(distanceM);
 }
 
 bool stuckReferenceUsable(const SensorReadings& sensors) {
@@ -190,6 +190,21 @@ void beginTurnWithOptionalPostAdvance(
   beginPhase(turnPhase, durationMs);
 }
 
+bool openingAdvanceActive() {
+  return g_deferredOpeningTurn != DeferredOpeningTurn::None ||
+         g_phase == WallFollowPhase::OpeningPostTurnAdvance;
+}
+
+int currentForwardBaseLeftSpeed() {
+  return openingAdvanceActive() ? WALL_FOLLOW_FORWARD_LEFT_SPEED :
+                                  WALL_FOLLOW_DRIVE_LEFT_SPEED;
+}
+
+int currentForwardBaseRightSpeed() {
+  return openingAdvanceActive() ? WALL_FOLLOW_FORWARD_RIGHT_SPEED :
+                                  WALL_FOLLOW_DRIVE_RIGHT_SPEED;
+}
+
 void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
   g_phase = phase;
   g_phaseStartMs = millis();
@@ -206,7 +221,7 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
 
   switch (phase) {
     case WallFollowPhase::DriveForward:
-      setMotorSpeeds(WALL_FOLLOW_FORWARD_LEFT_SPEED, WALL_FOLLOW_FORWARD_RIGHT_SPEED);
+      setMotorSpeeds(currentForwardBaseLeftSpeed(), currentForwardBaseRightSpeed());
       break;
     case WallFollowPhase::TurnLeft:
       setMotorSpeeds(-CAL_TURN_SPEED, CAL_TURN_SPEED);
@@ -228,7 +243,7 @@ void beginPhase(WallFollowPhase phase, uint32_t durationMs) {
       }
       break;
     case WallFollowPhase::OpeningPostTurnAdvance:
-      setMotorSpeeds(WALL_FOLLOW_FORWARD_LEFT_SPEED, WALL_FOLLOW_FORWARD_RIGHT_SPEED);
+      setMotorSpeeds(currentForwardBaseLeftSpeed(), currentForwardBaseRightSpeed());
       break;
     case WallFollowPhase::Settle:
     case WallFollowPhase::Stopped:
@@ -258,11 +273,11 @@ void beginStuckRecovery(const SensorReadings& sensors) {
 
 bool deferredOpeningAdvanceElapsed() {
   return g_deferredOpeningTurn != DeferredOpeningTurn::None &&
-         millis() - g_deferredOpeningTurnStartMs >= WALL_FOLLOW_OPENING_ADVANCE_MS;
+         millis() - g_deferredOpeningTurnStartMs >= WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_MS;
 }
 
 float computeLeewayAdjustedDistanceError(float followDistanceM) {
-  const float towardWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M + WALL_FOLLOW_TARGET_LEEWAY_M;
+  const float towardWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M + WALL_FOLLOW_TOWARD_WALL_LEEWAY_M;
   const float awayFromWallThresholdM = WALL_FOLLOW_TARGET_SIDE_M - WALL_FOLLOW_TARGET_LEEWAY_M;
 
   if (followDistanceM > towardWallThresholdM) {
@@ -346,8 +361,10 @@ void maybeLogWallCorrection(
 }
 
 void applyContinuousWallCorrection(const SensorReadings& sensors) {
-  int leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED;
-  int rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED;
+  const int baseLeftSpeed = currentForwardBaseLeftSpeed();
+  const int baseRightSpeed = currentForwardBaseRightSpeed();
+  int leftCommand = baseLeftSpeed;
+  int rightCommand = baseRightSpeed;
 
   if (WALL_FOLLOW_LEFT_HAND && sideReadingTracksNearbyWall(sensors.leftDistanceM)) {
     // Positive correction arcs left; negative correction arcs right.
@@ -355,8 +372,8 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
     // left wall, so arc left. If it is decreasing, arc right.
     const WallCorrectionResult result = computeWallCorrection(sensors.leftDistanceM);
     const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
-    leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED - correction;
-    rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED + correction;
+    leftCommand = baseLeftSpeed - correction;
+    rightCommand = baseRightSpeed + correction;
     leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
     rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
     maybeLogWallCorrection("left", sensors.leftDistanceM, result, correction, leftCommand, rightCommand);
@@ -364,8 +381,8 @@ void applyContinuousWallCorrection(const SensorReadings& sensors) {
     // Positive correction arcs right; negative correction arcs left.
     const WallCorrectionResult result = computeWallCorrection(sensors.rightDistanceM);
     const int correction = applyTowardWallCorrectionLimit(result.rawCorrection, result.distanceErrorM);
-    leftCommand = WALL_FOLLOW_FORWARD_LEFT_SPEED + correction;
-    rightCommand = WALL_FOLLOW_FORWARD_RIGHT_SPEED - correction;
+    leftCommand = baseLeftSpeed + correction;
+    rightCommand = baseRightSpeed - correction;
     leftCommand = keepForwardCommandAboveStaticFriction(leftCommand);
     rightCommand = keepForwardCommandAboveStaticFriction(rightCommand);
     maybeLogWallCorrection("right", sensors.rightDistanceM, result, correction, leftCommand, rightCommand);
@@ -557,7 +574,7 @@ void updateMazeSolver(const RobotPose& pose, const SensorReadings& sensors) {
         if (g_postTurnAdvancePending) {
           g_postTurnAdvancePending = false;
           logState("turn done -> timed post-turn advance", sensors);
-          beginPhase(WallFollowPhase::OpeningPostTurnAdvance, WALL_FOLLOW_OPENING_ADVANCE_MS);
+          beginPhase(WallFollowPhase::OpeningPostTurnAdvance, WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_MS);
         } else {
           settleThen(WallFollowPhase::Decide);
         }

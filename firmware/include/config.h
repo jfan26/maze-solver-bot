@@ -62,6 +62,11 @@ constexpr int WALL_FOLLOW_FORWARD_LEFT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_LEFT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
 constexpr int WALL_FOLLOW_FORWARD_RIGHT_SPEED =
     (WALL_FOLLOW_FORWARD_BASE_RIGHT_SPEED * WALL_FOLLOW_FORWARD_SPEED_SCALE_PERCENT + 50) / 100;
+constexpr int WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT = 81;
+constexpr int WALL_FOLLOW_DRIVE_LEFT_SPEED =
+    (WALL_FOLLOW_FORWARD_LEFT_SPEED * WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT + 50) / 100;
+constexpr int WALL_FOLLOW_DRIVE_RIGHT_SPEED =
+    (WALL_FOLLOW_FORWARD_RIGHT_SPEED * WALL_FOLLOW_DRIVE_SPEED_SCALE_PERCENT + 50) / 100;
 
 // This is still used by manual f/b tests, but the autonomous wall follower no
 // longer drives forward for one fixed cell-sized duration.
@@ -114,14 +119,19 @@ constexpr float WALL_FOLLOW_TARGET_SIDE_M = 0.145f;
 // Treat the followed side as an opening only when it stretches well beyond the
 // normal tracking distance; this is the threshold that triggers left/right turn
 // decisions at side branches.
-constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.22f;
+constexpr float WALL_FOLLOW_SIDE_OPEN_M = 0.27f;
 
 // When the wall follower decides to take a side opening, keep driving forward
 // before the turn and again after the turn so the robot commits farther into the
-// branch. One "pulse" here is one control-loop update.
-constexpr uint16_t WALL_FOLLOW_OPENING_ADVANCE_TICKS = 48;
-constexpr uint32_t WALL_FOLLOW_OPENING_ADVANCE_MS =
-    static_cast<uint32_t>(WALL_FOLLOW_OPENING_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
+// branch. Use a longer post-turn advance to carry the whole robot deeper into
+// the new corridor. One "pulse" here is one control-loop update.
+constexpr uint16_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS = 36;
+constexpr uint32_t WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_MS =
+    static_cast<uint32_t>(WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
+constexpr uint16_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_TICKS =
+    2 * WALL_FOLLOW_OPENING_PRE_TURN_ADVANCE_TICKS;
+constexpr uint32_t WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_MS =
+    static_cast<uint32_t>(WALL_FOLLOW_OPENING_POST_TURN_ADVANCE_TICKS) * CONTROL_LOOP_PERIOD_MS;
 
 // Cap how much the controller may steer toward the followed wall in a single
 // update. Positive correction always means "arc toward the followed wall" for
@@ -130,8 +140,10 @@ constexpr int WALL_FOLLOW_MAX_TOWARD_WALL_CORRECTION = 18;
 
 // Leave a small neutral band around the target distance so the robot does not
 // keep flipping between "steer toward wall" and "steer away from wall" around
-// the setpoint.
+// the setpoint. Use a larger far-side threshold so it keeps going straight until
+// the followed wall is clearly farther away.
 constexpr float WALL_FOLLOW_TARGET_LEEWAY_M = 0.005f;
+constexpr float WALL_FOLLOW_TOWARD_WALL_LEEWAY_M = 0.035f;
 
 // Continuous proportional/derivative steering correction while driving forward
 // along a side wall. These are intentionally stronger than before because the
@@ -151,12 +163,11 @@ constexpr uint32_t WALL_FOLLOW_LOG_PERIOD_MS = 100;
 // unchanged for this long, treat it as stalled motion: back up, then turn away
 // from the followed wall before re-evaluating.
 constexpr float WALL_FOLLOW_STUCK_DELTA_M = 0.015f;
-constexpr float WALL_FOLLOW_STUCK_MAX_SENSOR_M = 1.00f;
 constexpr uint32_t WALL_FOLLOW_STUCK_MS = 500;
 constexpr int WALL_FOLLOW_BACKUP_SPEED = 125;
 constexpr uint32_t WALL_FOLLOW_BACKUP_MS = 120;
 constexpr int WALL_FOLLOW_RECOVERY_TURN_SPEED = 120;
-constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 75;
+constexpr uint32_t WALL_FOLLOW_RECOVERY_TURN_MS = 50;
 
 // Short pause after each turn or backup move to reduce overshoot before reading ToF again.
 constexpr uint32_t WALL_FOLLOW_SETTLE_MS = 60;

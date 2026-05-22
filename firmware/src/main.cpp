@@ -8,8 +8,8 @@
 #include "robot_state.h"
 #include "sensors.h"
 
-// Set to false to skip automatic smoke-test sequence at boot.
-constexpr bool RUN_HARDWARE_SMOKE_TEST_AT_BOOT = true;
+// Set to true to run the automatic smoke-test sequence at boot.
+constexpr bool RUN_HARDWARE_SMOKE_TEST_AT_BOOT = false;
 
 static RobotPose g_pose{};
 static SensorReadings g_sensorReadings{};
